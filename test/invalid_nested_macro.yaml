@@ -1,0 +1,10 @@
+healthCheckTimeout: 120
+logLevel: info
+startPort: 5800
+models:
+  test-model:
+    cmd: "llama-server ${${deepseek-r1-params} ${fast-inference}}"
+    name: "Test Model"
+macros:
+  deepseek-r1-params: "value"
+  fast-inference: "value"

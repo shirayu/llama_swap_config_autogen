@@ -1,0 +1,9 @@
+healthCheckTimeout: 120
+logLevel: info
+startPort: 5800
+models:
+  test-model:
+    cmd: "llama-server --port ${PORT}"
+    name: "Test Model"
+macros:
+  test-macro: "test value"

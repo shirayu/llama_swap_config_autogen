@@ -1,0 +1,40 @@
+[project]
+name = "llama_swap_config_autogen"
+version = "1.0.0"
+authors = [{ name = "Yuta Hayashibe", email = "yuta@hayashibe.jp" }]
+license = "Apache-2.0"
+description = "Auto-discover GGUF models from directories for llama-swap config"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0", "pydantic>=2.0"]
+
+[project.scripts]
+llama-swap-config-autogen = "llama_swap_config_autogen.cli:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+exclude = ["node_modules*", ".venv*", ".git*"]
+
+[tool.setuptools.package-data]
+llama_swap_config_autogen = ["template.yaml"]
+
+[tool.uv]
+package = true
+dev-dependencies = ["ruff >=0.9.6", "yamllint >=1.35.1", "pytest >=8.0.0"]
+
+[tool.pyright]
+reportDeprecated = "error"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = []
+fixable = ["ALL"]

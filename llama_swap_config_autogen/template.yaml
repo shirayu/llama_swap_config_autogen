@@ -1,0 +1,122 @@
+# llama-swap-config-autogen configuration file
+# Edit this file to match your environment
+
+# List of directories where models are stored (required)
+models:
+  - /opt/llama.cpp/models
+  # - /home/user/models  # Add additional directories if any
+
+# Basic settings
+default_ttl: 300              # Model lifetime (seconds)
+health_check_timeout: 240     # Health check timeout (seconds)
+log_level: warn               # Log level (debug, info, warn, error)
+start_port: 9091              # Starting port number
+
+# Advanced settings (optional)
+max_concurrent_models: 3      # Number of models that can run simultaneously
+preload_popular_models: true  # Preload popular models
+cleanup_interval: 60          # Cleanup interval (seconds)
+
+# macros: Reusable command templates
+macros:
+  # Base settings
+  "binary": "/opt/llama.cpp/bin/llama-server"
+  "default-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on --n-gpu-layers 999"
+  "reasoning-base": "${default-params} --reasoning-format none"
+
+  # Common parts: Context length
+  "small-context": "--ctx-size 8192"
+  "medium-context": "--ctx-size 32768"
+  "large-context": "--ctx-size 65536"
+  "ultra-context": "--ctx-size 131072 --batch-size 256"
+
+  # Common parts: GPU settings
+  "limited-gpu": "--n-gpu-layers 13"
+  "medium-gpu": "--n-gpu-layers 25"
+
+  # Common parts: CPU settings
+  "cpu-offload": "-ot '.*.ffn_.*_exps.=CPU'"
+
+  # Common parts: Temperature settings
+  "reasoning-temp": "--temperature 0.7 --top-p 0.9"
+  "coding-temp": "--temperature 0.1"
+  "creative-temp": "--temperature 1.0 --top-p 0.95"
+  "precise-temp": "--temperature 0.05 --top-p 0.8"
+
+  # Common parts: Memory settings
+  "low-memory": "--no-mmap --mlock"
+  "memory-efficient": "--cache-type-k q4_0 --cache-type-v q4_0"
+
+  # Common parts: Performance settings
+  "fast-inference": "--batch-size 512 --ubatch-size 512"
+  "quality-inference": "--batch-size 128 --ubatch-size 32"
+
+  # Model-specific macros
+  "gpt-oss-20b-params": "${reasoning-base} -c 0 -fa"
+  "deepseek-r1-params": "${reasoning-base} ${reasoning-temp}"
+  "gemma-large-params": "${default-params} ${medium-gpu} ${small-context}"
+  "gpt-oss-120b-params": "${reasoning-base} ${limited-gpu} --ctx-size 16384 --no-mmap"
+  "qwen-coder-params": "${default-params} ${coding-temp} ${medium-context}"
+  "qwen-cpu-params": "${default-params} ${cpu-offload}"
+  "qwen-large-context-params": "${default-params} ${large-context}"
+
+  # New model macros
+  "creative-writing-params": "${default-params} ${creative-temp} ${medium-context}"
+  "precise-coding-params": "${default-params} ${precise-temp} ${small-context} ${quality-inference}"
+  "memory-constrained-params": "${default-params} ${low-memory} ${memory-efficient}"
+
+  # Combined macros
+  "long-context-params": "${default-params} ${large-context}"
+  "cpu-long-context-params": "${default-params} ${cpu-offload} ${large-context}"
+
+# Model name patterns and macro mapping
+model_patterns:
+  # Reasoning-focused models
+  "DeepSeek-R1-Distill": "deepseek-r1-params"
+  "gpt-oss-120b": "gpt-oss-120b-params"
+  "gpt-oss-20b": "gpt-oss-20b-params"
+
+  # General-purpose large models
+  "Qwen3-30B-A3B-Instruct-2507": "qwen-large-context-params"
+  "gemma-3-27b": "gemma-large-params"
+
+  # Coding-focused models
+  "Qwen3-Coder": "qwen-coder-params"
+  "CodeLlama": "precise-coding-params"
+  "StarCoder": "qwen-coder-params"
+
+  # Creative writing models
+  "Creative": "creative-writing-params"
+  "GPT4All": "creative-writing-params"
+
+  # Lightweight models (for memory-constrained environments)
+  "Phi-3": "memory-constrained-params"
+  "TinyLlama": "memory-constrained-params"
+
+# Variant generation settings (optional)
+# Automatically generate variations of the same model with different settings
+variants:
+  # CPU variant
+  - base_pattern: "Qwen3-30B-A3B-Instruct-2507"
+    suffix: " (with CPU)"
+    macro: "qwen-cpu-params"
+
+  # Combined variant
+  - base_pattern: "Qwen3-30B-A3B-Instruct-2507"
+    suffix: " (CPU + Long Context)"
+    macro: "cpu-long-context-params"
+
+  # Memory-constrained variant
+  - base_pattern: "gemma-3-27b"
+    suffix: " (Memory Efficient)"
+    macro: "memory-constrained-params"
+
+  # Fast inference variant
+  - base_pattern: "DeepSeek-R1-Distill"
+    suffix: " (Fast)"
+    macro: "${deepseek-r1-params} ${fast-inference}"
+
+  # Creative-focused variant
+  - base_pattern: "Qwen3-30B-A3B-Instruct-2507"
+    suffix: " (Creative)"
+    macro: "creative-writing-params"
