@@ -69,3 +69,7 @@ llama-swap --config ./config.yaml --watch-config -listen 0.0.0.0:9090
 # Validation
 uv run llama-swap-config-autogen validate config.yaml
 ```
+
+## License
+
+Apache 2.0
