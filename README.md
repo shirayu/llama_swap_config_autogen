@@ -1,5 +1,7 @@
 # Llama-Swap Config Autogen
 
+![Header](./header.avif)
+
 **Auto-discover GGUF models from directories for [llama-swap](https://github.com/mostlygeek/llama-swap) config**
 
 Yes, llama-swap has macros. But you still need to manually list every model:
