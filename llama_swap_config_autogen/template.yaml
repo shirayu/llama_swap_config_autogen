@@ -21,13 +21,14 @@ cleanup_interval: 60          # Cleanup interval (seconds)
 macros:
   # Base settings
   "binary": "/opt/llama.cpp/bin/llama-server"
-  "default-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on --n-gpu-layers 999 ${default-context}"
+  "default-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on --n-gpu-layers 999"
   "reasoning-base": "${default-params} --reasoning-format none"
 
   # Common parts: Context length
   "medium-context": "--ctx-size 32768"
   "large-context": "--ctx-size 65536"
   "ultra-context": "--ctx-size 131072 --batch-size 256"
+  "full-context": "-c 0"
   "default-context": "${medium-context}"
 
   # Common parts: GPU settings
@@ -40,7 +41,6 @@ macros:
   # Common parts: Temperature settings
   "reasoning-temp": "--temperature 0.7 --top-p 0.9"
   "coding-temp": "--temperature 0.1"
-  "creative-temp": "--temperature 1.0 --top-p 0.95"
 
   # Common parts: Memory settings
   "low-memory": "--no-mmap --mlock"
@@ -60,7 +60,6 @@ macros:
   "qwen-large-context-params": "${default-params} ${large-context}"
 
   # New model macros
-  "creative-writing-params": "${default-params} ${creative-temp} ${medium-context}"
   "memory-constrained-params": "${default-params} ${low-memory} ${memory-efficient}"
 
   # Combined macros
@@ -81,10 +80,6 @@ model_patterns:
   # Coding-focused models
   "Qwen3-Coder": "qwen-coder-params"
   "StarCoder": "qwen-coder-params"
-
-  # Creative writing models
-  "Creative": "creative-writing-params"
-  "GPT4All": "creative-writing-params"
 
   # Lightweight models (for memory-constrained environments)
   "Phi-3": "memory-constrained-params"
@@ -113,7 +108,3 @@ variants:
     suffix: " (Fast)"
     macro: "${deepseek-r1-params} ${fast-inference}"
 
-  # Creative-focused variant
-  - base_pattern: "Qwen3-30B-A3B-Instruct-2507"
-    suffix: " (Creative)"
-    macro: "creative-writing-params"
