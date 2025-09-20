@@ -26,7 +26,9 @@ llama_swap_config_autogen = ["template.yaml"]
 
 [tool.uv]
 package = true
-dev-dependencies = ["ruff >=0.9.6", "yamllint >=1.35.1", "pytest >=8.0.0"]
+
+[dependency-groups]
+dev = ["ruff >=0.9.6", "yamllint >=1.35.1", "pytest >=8.0.0"]
 
 [tool.pyright]
 reportDeprecated = "error"
