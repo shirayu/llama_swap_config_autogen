@@ -25,7 +25,6 @@ macros:
   "reasoning-base": "${default-params} --reasoning-format none"
 
   # Common parts: Context length
-  "small-context": "--ctx-size 8192"
   "medium-context": "--ctx-size 32768"
   "large-context": "--ctx-size 65536"
   "ultra-context": "--ctx-size 131072 --batch-size 256"
@@ -42,7 +41,6 @@ macros:
   "reasoning-temp": "--temperature 0.7 --top-p 0.9"
   "coding-temp": "--temperature 0.1"
   "creative-temp": "--temperature 1.0 --top-p 0.95"
-  "precise-temp": "--temperature 0.05 --top-p 0.8"
 
   # Common parts: Memory settings
   "low-memory": "--no-mmap --mlock"
@@ -55,7 +53,7 @@ macros:
   # Model-specific macros
   "gpt-oss-20b-params": "${reasoning-base} -c 0 -fa"
   "deepseek-r1-params": "${reasoning-base} ${reasoning-temp}"
-  "gemma-large-params": "${default-params} ${medium-gpu} ${small-context}"
+  "gemma-large-params": "${default-params} ${medium-gpu} ${medium-context}"
   "gpt-oss-120b-params": "${reasoning-base} ${limited-gpu} --ctx-size 16384 --no-mmap"
   "qwen-coder-params": "${default-params} ${coding-temp} ${medium-context}"
   "qwen-cpu-params": "${default-params} ${cpu-offload}"
@@ -63,7 +61,6 @@ macros:
 
   # New model macros
   "creative-writing-params": "${default-params} ${creative-temp} ${medium-context}"
-  "precise-coding-params": "${default-params} ${precise-temp} ${small-context} ${quality-inference}"
   "memory-constrained-params": "${default-params} ${low-memory} ${memory-efficient}"
 
   # Combined macros
@@ -83,7 +80,6 @@ model_patterns:
 
   # Coding-focused models
   "Qwen3-Coder": "qwen-coder-params"
-  "CodeLlama": "precise-coding-params"
   "StarCoder": "qwen-coder-params"
 
   # Creative writing models
