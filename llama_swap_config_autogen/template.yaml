@@ -21,7 +21,7 @@ cleanup_interval: 60          # Cleanup interval (seconds)
 macros:
   # Base settings
   "binary": "/opt/llama.cpp/bin/llama-server"
-  "default-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on --n-gpu-layers 999"
+  "default-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on --n-gpu-layers 999 ${default-context}"
   "reasoning-base": "${default-params} --reasoning-format none"
 
   # Common parts: Context length
@@ -29,6 +29,7 @@ macros:
   "medium-context": "--ctx-size 32768"
   "large-context": "--ctx-size 65536"
   "ultra-context": "--ctx-size 131072 --batch-size 256"
+  "default-context": "${medium-context}"
 
   # Common parts: GPU settings
   "limited-gpu": "--n-gpu-layers 13"
