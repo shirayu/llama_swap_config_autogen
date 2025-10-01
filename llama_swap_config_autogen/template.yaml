@@ -29,7 +29,7 @@ macros:
   "large-context": "--ctx-size 65536"
   "ultra-context": "--ctx-size 131072 --batch-size 256"
   "full-context": "-c 0"
-  "default-context": "${medium-context}"
+  "default-context": "${large-context}"
 
   # Common parts: GPU settings
   "limited-gpu": "--n-gpu-layers 13"
