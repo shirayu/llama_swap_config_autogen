@@ -1,4 +1,6 @@
-name: typos
+---
+# yamllint disable rule:line-length
+name: Typos
 
 on:
   push:
