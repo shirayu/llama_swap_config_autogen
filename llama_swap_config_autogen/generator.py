@@ -128,6 +128,58 @@ def generate_model_configs(settings: Settings) -> dict[str, YamlModelConfig]:
     return models
 
 
+def deduplicate_parameters(expanded_value: str) -> str:
+    """Remove duplicate parameters, keeping the last occurrence (rightmost priority)
+
+    Handles parameter-value pairs like --cache-type-k q8_0 correctly by tracking
+    which parameter names (flags starting with -) appear and keeping only the last
+    occurrence along with its value.
+    """
+    tokens = expanded_value.split()
+
+    # Track parameters and their positions
+    # Key: parameter name (flag), Value: list of indices (parameter index, value indices)
+    param_occurrences = {}
+    standalone_tokens = {}  # Tokens that are not part of parameter pairs
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+
+        # Check if this is a parameter flag (starts with -)
+        if token.startswith("-"):
+            # Collect any non-flag tokens that follow as values
+            value_indices = []
+            j = i + 1
+            while j < len(tokens) and not tokens[j].startswith("-"):
+                value_indices.append(j)
+                j += 1
+
+            # Store this parameter occurrence (will be overwritten if duplicate)
+            param_occurrences[token] = (i, value_indices)
+            i = j  # Skip to next parameter
+        else:
+            # This is a standalone value (shouldn't happen in well-formed params)
+            standalone_tokens[i] = token
+            i += 1
+
+    # Rebuild the parameter string with deduplication
+    # Collect all indices to include (parameters and their values)
+    indices_to_include = set()
+
+    # Add the last occurrence of each parameter and its values
+    for param_name, (param_idx, value_indices) in param_occurrences.items():
+        indices_to_include.add(param_idx)
+        indices_to_include.update(value_indices)
+
+    # Add standalone tokens
+    indices_to_include.update(standalone_tokens.keys())
+
+    # Rebuild the string in order
+    result = [tokens[i] for i in sorted(indices_to_include)]
+    return " ".join(result)
+
+
 def expand_macro(macro_name: str, all_macros: dict[str, str], visited: set[str] | None = None) -> str:
     """Recursively expand a macro by resolving all nested macro references"""
     if visited is None:
@@ -154,6 +206,9 @@ def expand_macro(macro_name: str, all_macros: dict[str, str], visited: set[str] 
             nested_expanded = expand_macro(nested_macro, all_macros, visited.copy())
             # Replace the macro reference with its expanded value
             expanded_value = expanded_value.replace(f"${{{nested_macro}}}", nested_expanded)
+
+    # Deduplicate parameters, keeping the last (rightmost) occurrence
+    expanded_value = deduplicate_parameters(expanded_value)
 
     return expanded_value
 

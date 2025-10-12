@@ -38,7 +38,9 @@ macros:
   "layers-default": "${layers-full}"
 
   # Common parts: CPU settings
-  "cpu-offload": "-ot '.*.ffn_.*_exps.=CPU'"
+  "cpu-offload-full": "-ot '.*.ffn_.*_exps.=CPU'"
+  "cpu-offload-moe-full": "--cpu-moe"
+  "cpu-offload-moe-mini": "--n-cpu-moe 16"
 
   # Common parts: Temperature settings
   "temp-reasoning": "--temperature 0.7 --top-p 0.9"
@@ -57,7 +59,7 @@ macros:
   "gemma-large-params": "${default-params} ${layers-medium} ${context-medium}"
   "gpt-oss-120b-params": "${reasoning-base} ${layers-mini} --ctx-size 16384 --no-mmap"
   "qwen-coder-params": "${default-params} ${temp-coding} ${context-medium}"
-  "qwen-cpu-params": "${default-params} ${cpu-offload}"
+  "qwen-cpu-params": "${default-params} ${cpu-offload-moe-full}"
   "qwen-context-large-params": "${default-params} ${context-large}"
 
   # New model macros
@@ -65,7 +67,7 @@ macros:
 
   # Combined macros
   "long-context-params": "${default-params} ${context-large}"
-  "cpu-long-context-params": "${default-params} ${cpu-offload} ${context-large}"
+  "cpu-long-context-params": "${default-params} ${cpu-offload-moe-full} ${context-large}"
 
 # Model name patterns and macro mapping
 model_patterns:
