@@ -55,7 +55,7 @@ macros:
   "gpt-oss-20b-params": "${reasoning-base} -c 0 -fa"
   "deepseek-r1-params": "${reasoning-base} ${temp-reasoning}"
   "gemma-large-params": "${default-params} ${layers-medium} ${context-medium}"
-  "gpt-oss-120b-params": "${reasoning-base} ${limited-gpu} --ctx-size 16384 --no-mmap"
+  "gpt-oss-120b-params": "${reasoning-base} ${layers-mini} --ctx-size 16384 --no-mmap"
   "qwen-coder-params": "${default-params} ${temp-coding} ${context-medium}"
   "qwen-cpu-params": "${default-params} ${cpu-offload}"
   "qwen-context-large-params": "${default-params} ${context-large}"
