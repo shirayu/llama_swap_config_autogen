@@ -128,8 +128,38 @@ def generate_model_configs(settings: Settings) -> dict[str, YamlModelConfig]:
     return models
 
 
+def expand_macro(macro_name: str, all_macros: dict[str, str], visited: set[str] | None = None) -> str:
+    """Recursively expand a macro by resolving all nested macro references"""
+    if visited is None:
+        visited = set()
+
+    if macro_name in visited:
+        raise ValueError(f"Circular macro reference detected: {macro_name}")
+
+    if macro_name not in all_macros:
+        # Return as-is if macro not found (could be built-in like ${PORT})
+        return f"${{{macro_name}}}"
+
+    visited.add(macro_name)
+    macro_value = all_macros[macro_name]
+
+    # Find all nested macro references
+    nested_macros = re.findall(r"\$\{([^}]+)\}", macro_value)
+
+    # Expand each nested macro
+    expanded_value = macro_value
+    for nested_macro in nested_macros:
+        if nested_macro in all_macros:
+            # Recursively expand nested macro
+            nested_expanded = expand_macro(nested_macro, all_macros, visited.copy())
+            # Replace the macro reference with its expanded value
+            expanded_value = expanded_value.replace(f"${{{nested_macro}}}", nested_expanded)
+
+    return expanded_value
+
+
 def extract_used_macros_from_commands(commands: list[str], all_macros: dict[str, str]) -> dict[str, str]:
-    """Recursively extract macros and their dependencies used in commands"""
+    """Extract macros used in commands and expand nested macro references"""
     used_macros = {}
     to_process = set()
 
@@ -138,19 +168,19 @@ def extract_used_macros_from_commands(commands: list[str], all_macros: dict[str,
         macro_matches = re.findall(r"\$\{([^}]+)\}", command)
         to_process.update(macro_matches)
 
-    # Recursively resolve macro dependencies
-    while to_process:
-        current_macro = to_process.pop()
-        if current_macro in used_macros or current_macro not in all_macros:
+    # Process each macro and expand it
+    for macro_name in to_process:
+        if macro_name not in all_macros:
             continue
 
-        # Add current macro to used list
-        macro_value = all_macros[current_macro]
-        used_macros[current_macro] = macro_value
-
-        # Check if this macro references other macros
-        nested_macros = re.findall(r"\$\{([^}]+)\}", macro_value)
-        to_process.update(nested_macros)
+        # Expand the macro to resolve all nested references
+        try:
+            expanded_value = expand_macro(macro_name, all_macros)
+            used_macros[macro_name] = expanded_value
+        except ValueError as e:
+            # If circular reference detected, keep original value
+            print(f"Warning: {e}. Keeping original macro definition.")
+            used_macros[macro_name] = all_macros[macro_name]
 
     return used_macros
 
