@@ -168,7 +168,7 @@ def deduplicate_parameters(expanded_value: str) -> str:
     indices_to_include = set()
 
     # Add the last occurrence of each parameter and its values
-    for param_name, (param_idx, value_indices) in param_occurrences.items():
+    for param_idx, value_indices in param_occurrences.values():
         indices_to_include.add(param_idx)
         indices_to_include.update(value_indices)
 

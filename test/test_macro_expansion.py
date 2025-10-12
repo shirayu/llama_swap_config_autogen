@@ -55,7 +55,10 @@ class TestMacroExpansion:
         }
         result = expand_macro("memory-constrained-params", macros)
         # With deduplication, parameter-value pairs are preserved
-        expected = "--log-disable --jinja --n-gpu-layers 999 --ctx-size 65536 --no-mmap --mlock --cache-type-k q4_0 --cache-type-v q4_0"
+        expected = (
+            "--log-disable --jinja --n-gpu-layers 999 "
+            "--ctx-size 65536 --no-mmap --mlock --cache-type-k q4_0 --cache-type-v q4_0"
+        )
         assert result == expected
 
     def test_circular_reference_detection(self):
@@ -174,7 +177,8 @@ class TestParameterDeduplication:
             "context-large": "--ctx-size 65536",
             "layers-default": "${layers-full}",
             "context-default": "${context-large}",
-            "default-params": "--log-disable --cache-type-k q8_0 --cache-type-v q8_0 ${layers-default} ${context-default}",
+            "default-params": "--log-disable --cache-type-k q8_0 "
+            "--cache-type-v q8_0 ${layers-default} ${context-default}",
             "low-memory": "--no-mmap --mlock",
             "memory-efficient": "--cache-type-k q4_0 --cache-type-v q4_0",
             "memory-constrained-params": "${default-params} ${low-memory} ${memory-efficient}",
