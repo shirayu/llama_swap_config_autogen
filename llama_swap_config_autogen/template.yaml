@@ -21,50 +21,51 @@ cleanup_interval: 60          # Cleanup interval (seconds)
 macros:
   # Base settings
   "binary": "/opt/llama.cpp/bin/llama-server"
-  "default-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on --n-gpu-layers 999"
+  "default-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on ${layers-default} ${context-default}"
   "reasoning-base": "${default-params} --reasoning-format none"
 
   # Common parts: Context length
-  "medium-context": "--ctx-size 32768"
-  "large-context": "--ctx-size 65536"
-  "ultra-context": "--ctx-size 131072 --batch-size 256"
-  "full-context": "-c 0"
-  "default-context": "${large-context}"
+  "context-medium": "--ctx-size 32768"
+  "context-large": "--ctx-size 65536"
+  "context-ultra": "--ctx-size 131072 --batch-size 256"
+  "context-full": "-c 0"
+  "context-default": "${context-large}"
 
   # Common parts: GPU settings
-  "limited-gpu": "--n-gpu-layers 13"
-  "medium-gpu": "--n-gpu-layers 25"
+  "layers-mini": "--n-gpu-layers 13"
+  "layers-medium": "--n-gpu-layers 25"
+  "layers-full": "--n-gpu-layers 999"
+  "layers-default": "${layers-full}"
 
   # Common parts: CPU settings
   "cpu-offload": "-ot '.*.ffn_.*_exps.=CPU'"
 
   # Common parts: Temperature settings
-  "reasoning-temp": "--temperature 0.7 --top-p 0.9"
-  "coding-temp": "--temperature 0.1"
+  "temp-reasoning": "--temperature 0.7 --top-p 0.9"
+  "temp-conding": "--temperature 0.1"
 
   # Common parts: Memory settings
   "low-memory": "--no-mmap --mlock"
   "memory-efficient": "--cache-type-k q4_0 --cache-type-v q4_0"
 
   # Common parts: Performance settings
-  "fast-inference": "--batch-size 512 --ubatch-size 512"
-  "quality-inference": "--batch-size 128 --ubatch-size 32"
+  "inference-fast": "--batch-size 512 --ubatch-size 512"
 
   # Model-specific macros
   "gpt-oss-20b-params": "${reasoning-base} -c 0 -fa"
-  "deepseek-r1-params": "${reasoning-base} ${reasoning-temp}"
-  "gemma-large-params": "${default-params} ${medium-gpu} ${medium-context}"
+  "deepseek-r1-params": "${reasoning-base} ${temp-reasoning}"
+  "gemma-large-params": "${default-params} ${layers-medium} ${context-medium}"
   "gpt-oss-120b-params": "${reasoning-base} ${limited-gpu} --ctx-size 16384 --no-mmap"
-  "qwen-coder-params": "${default-params} ${coding-temp} ${medium-context}"
+  "qwen-coder-params": "${default-params} ${temp-coding} ${context-medium}"
   "qwen-cpu-params": "${default-params} ${cpu-offload}"
-  "qwen-large-context-params": "${default-params} ${large-context}"
+  "qwen-context-large-params": "${default-params} ${context-large}"
 
   # New model macros
   "memory-constrained-params": "${default-params} ${low-memory} ${memory-efficient}"
 
   # Combined macros
-  "long-context-params": "${default-params} ${large-context}"
-  "cpu-long-context-params": "${default-params} ${cpu-offload} ${large-context}"
+  "long-context-params": "${default-params} ${context-large}"
+  "cpu-long-context-params": "${default-params} ${cpu-offload} ${context-large}"
 
 # Model name patterns and macro mapping
 model_patterns:
@@ -74,7 +75,7 @@ model_patterns:
   "gpt-oss-20b": "gpt-oss-20b-params"
 
   # General-purpose large models
-  "Qwen3-30B-A3B-Instruct-2507": "qwen-large-context-params"
+  "Qwen3-30B-A3B-Instruct-2507": "qwen-context-large-params"
   "gemma-3-27b": "gemma-large-params"
 
   # Coding-focused models
@@ -106,5 +107,5 @@ variants:
   # Fast inference variant
   - base_pattern: "DeepSeek-R1-Distill"
     suffix: " (Fast)"
-    macro: "${deepseek-r1-params} ${fast-inference}"
+    macro: "${deepseek-r1-params} ${inference-fast}"
 
