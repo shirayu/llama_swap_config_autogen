@@ -21,7 +21,7 @@ def generate_config_template(models_dirs: list[Path] | None = None, binary_path:
     if binary_path and "macros" in config:
         config["macros"]["binary"] = str(binary_path)
 
-    return yaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    return yaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False, width=float("inf"))
 
 
 def write_config_template(

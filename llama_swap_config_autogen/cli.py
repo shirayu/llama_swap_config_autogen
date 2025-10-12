@@ -127,6 +127,7 @@ def main() -> None:
             default_flow_style=False,
             allow_unicode=True,
             sort_keys=False,
+            width=float("inf"),
         )
 
         if args.output:
