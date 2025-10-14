@@ -62,7 +62,7 @@ macros:
   "gemma-large-params": "${default-params} ${layers-medium} ${context-medium}"
   "gpt-oss-120b-params": "${reasoning-base} ${layers-mini} --ctx-size 16384 --no-mmap"
   "qwen-coder-params": "${default-params} ${temp-coding} ${context-medium}"
-  "qwen-cpu-params": "${default-params} ${cpu-offload-moe-default}"
+  "qwen-cpu-params": "${default-params} ${cpu-offload-moe-default} ${context-large}"
   "qwen-context-large-params": "${default-params} ${context-large}"
 
   # New model macros
@@ -70,7 +70,6 @@ macros:
 
   # Combined macros
   "long-context-params": "${default-params} ${context-large}"
-  "cpu-long-context-params": "${default-params} ${cpu-offload-moe-default} ${context-full}"
 
 # Model name patterns and macro mapping
 model_patterns:
@@ -98,11 +97,6 @@ variants:
   - base_pattern: "Qwen3-30B-A3B-Instruct-2507"
     suffix: " (with CPU)"
     macro: "qwen-cpu-params"
-
-  # Combined variant
-  - base_pattern: "Qwen3-30B-A3B-Instruct-2507"
-    suffix: " (CPU + Long Context)"
-    macro: "cpu-long-context-params"
 
   # Memory-constrained variant
   - base_pattern: "gemma-3-27b"
