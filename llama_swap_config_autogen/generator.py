@@ -1,50 +1,30 @@
 """YAML configuration generation logic."""
 
-import json
 import re
-from pathlib import Path
-from urllib.parse import urlparse
 
 from .config import load_macro_config
 from .models import Config, MacroConfig, MultilineLiteral, Settings, YamlModelConfig
 
 
-def extract_model_name_from_url(url: str, fallback_name: str) -> str:
+def extract_model_name_from_url(filename: str) -> str:
     """Extract model name from HuggingFace URL or return fallback name."""
-    if not url.startswith("https://huggingface.co/"):
-        if not fallback_name:
-            raise ValueError(f"No fallback name provided for non-HuggingFace URL: {url}")
-        return fallback_name
 
-    parsed = urlparse(url)
-    path_parts = parsed.path.strip("/").split("/")
-    if len(path_parts) < 2:
-        raise ValueError(f"Invalid HuggingFace URL structure: {url}")
+    frn = filename.split("_", maxsplit=2)
+    if len(frn) < 3:
+        raise ValueError(f"Invalid filename: {filename}")
 
-    user, repo = path_parts[0], path_parts[1].replace("-gguf", "").replace("-GGUF", "")
-    filename = Path(url).stem
-    parts = filename.split("-")
-    fmt = parts[-4] if len(parts) >= 4 and parts[-2] == "of" else parts[-1]
-
-    if not user or not repo or not fmt:
-        raise ValueError(f"Unable to extract user, repo, or format from URL: {url}")
+    user, repo = frn[0], frn[1].replace("-gguf", "").replace("-GGUF", "")
+    parts = frn[-1].replace(".gguf", "").split("-")
+    fmt = parts[-4] if len(frn) >= 4 and parts[-2] == "of" else parts[-1]
 
     return f"{user}/{repo}:{fmt}"
 
 
-def generate_simple_id(url: str, fallback_name: str) -> str:
+def generate_simple_id(filename: str) -> str:
     """Generate simple ID directly from URL (without user, fmt prefix)"""
-    if not url.startswith("https://huggingface.co/"):
-        if not fallback_name:
-            raise ValueError(f"No fallback name provided for non-HuggingFace URL: {url}")
-        return fallback_name.replace(":", "-").lower()
 
-    parsed = urlparse(url)
-    path_parts = parsed.path.strip("/").split("/")
-    if len(path_parts) < 2:
-        raise ValueError(f"Invalid HuggingFace URL structure: {url}")
-
-    repo = path_parts[1].replace("-gguf", "").replace("-GGUF", "")  # Remove user, use repo only
+    frn = filename.split("_", maxsplit=2)[-1]
+    repo = frn.replace(".gguf", "").replace(".GGUF", "")  # Remove user, use repo only
 
     return f"{repo}".lower()
 
@@ -83,20 +63,14 @@ def generate_model_configs(settings: Settings) -> dict[str, YamlModelConfig]:
         if not models_dir.exists():
             continue
 
-        for path_model_json in sorted(models_dir.glob("*.gguf.json")):
-            prefix = ".".join(path_model_json.name.split(".")[:-2])
-
-            with path_model_json.open() as inf:
-                info = json.load(inf)
-                url = info.get("url", "")
-                display_name = generate_simple_id(url, prefix)
-                model_id = extract_model_name_from_url(url, prefix)
+        for path_model in sorted(models_dir.glob("*.gguf")):
+            display_name = generate_simple_id(path_model.name)
+            model_id = extract_model_name_from_url(path_model.name)
 
             if model_id in ids:
                 continue
             ids.add(model_id)
 
-            path_model = path_model_json.parent.joinpath(prefix + ".gguf")
             macro_name = get_model_macro(display_name, macro_config)
 
             cmd = format_command_with_macro(str(path_model), macro_name)
