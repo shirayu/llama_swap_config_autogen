@@ -1,6 +1,7 @@
 """Command line interface for llama-swap YAML generator."""
 
 import argparse
+import sys
 from pathlib import Path
 
 import yaml
@@ -15,9 +16,9 @@ def validate_model_dir(path_str: str) -> Path:
     """Validate the existence of model directory."""
     path = Path(path_str)
     if not path.exists():
-        raise argparse.ArgumentTypeError(f"Model path '{path_str}' does not exist.")
+        sys.stderr.write(f"Model path '{path_str}' does not exist.\n")
     if not path.is_dir():
-        raise argparse.ArgumentTypeError(f"Model path '{path_str}' is not a directory.")
+        sys.stderr.write(f"Model path '{path_str}' is not a directory.\n")
     return path
 
 
@@ -25,9 +26,9 @@ def validate_binary_file(path_str: str) -> Path:
     """Validate the existence of binary file."""
     path = Path(path_str)
     if not path.exists():
-        raise argparse.ArgumentTypeError(f"Binary path '{path_str}' does not exist.")
+        sys.stderr.write(f"Binary path '{path_str}' does not exist.\n")
     if not path.is_file():
-        raise argparse.ArgumentTypeError(f"Binary path '{path_str}' is not a file.")
+        sys.stderr.write(f"Binary path '{path_str}' is not a file.\n")
     return path
 
 
