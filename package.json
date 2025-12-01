@@ -2,9 +2,9 @@
   "author": "",
   "description": "",
   "devDependencies": {
-    "@biomejs/biome": "2.3.6",
+    "@biomejs/biome": "2.3.8",
     "@taplo/cli": "^0.7.0",
-    "markdownlint-cli": "^0.45.0",
+    "markdownlint-cli": "^0.46.0",
     "npm-run-all2": "^8.0.4",
     "pyright": "^1.1.407"
   },
