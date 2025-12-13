@@ -4,7 +4,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
     "@taplo/cli": "^0.7.0",
-    "markdownlint-cli": "^0.46.0",
+    "markdownlint-cli": "^0.47.0",
     "npm-run-all2": "^8.0.4",
     "pyright": "^1.1.407"
   },
