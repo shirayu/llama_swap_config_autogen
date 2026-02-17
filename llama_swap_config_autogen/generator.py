@@ -217,6 +217,7 @@ def extract_used_macros_from_commands(commands: list[str], all_macros: dict[str,
 def generate_full_config(settings: Settings, config: Config) -> dict:
     """Generate complete configuration in llama-swap format"""
     models = generate_model_configs(settings)
+    macro_config = load_macro_config(settings.config_file)
 
     # Create llama-swap format configuration
     output_config = {
@@ -239,8 +240,8 @@ def generate_full_config(settings: Settings, config: Config) -> dict:
         all_commands.append(cmd_str)
 
     # Extract and add only used macros
-    if config.macros and all_commands:
-        used_macros = extract_used_macros_from_commands(all_commands, config.macros)
+    if macro_config.macros and all_commands:
+        used_macros = extract_used_macros_from_commands(all_commands, macro_config.macros)
         if used_macros:
             output_config["macros"] = used_macros
 

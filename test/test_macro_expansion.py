@@ -1,7 +1,12 @@
 """Tests for macro expansion functionality"""
 
-import pytest
+import tempfile
+from pathlib import Path
 
+import pytest
+import yaml
+
+from llama_swap_config_autogen.config import load_macro_config
 from llama_swap_config_autogen.generator import expand_macro, extract_used_macros_from_commands
 
 
@@ -213,3 +218,40 @@ class TestParameterDeduplication:
         assert tokens.index("--flag3") < tokens.index("--flag4")
         # --flag2 should appear only once, at its last position (from b)
         assert result.count("--flag2") == 1
+
+
+class TestMacroNameNormalization:
+    """Test macro name normalization for llama-swap compatibility."""
+
+    def test_dot_in_macro_name_is_normalized(self):
+        config_data = {
+            "models": ["/tmp/models"],
+            "macros": {
+                "glm.4.7-params": "--temperature 1.0",
+                "glm-wrapper": "${glm.4.7-params} --repeat-penalty 1.0",
+            },
+            "model_patterns": {"glm-4.7-flash": "glm.4.7-params"},
+            "variants": [
+                {
+                    "base_pattern": "glm-4.7-flash",
+                    "suffix": " (thinking off)",
+                    "macro": "${glm.4.7-params} --chat-template-kwargs '{\"enable_thinking\": false}'",
+                }
+            ],
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.safe_dump(config_data, f)
+            temp_path = Path(f.name)
+
+        try:
+            macro_config = load_macro_config(temp_path)
+            assert "glm-4-7-params" in macro_config.macros
+            assert macro_config.macros["glm-wrapper"] == "${glm-4-7-params} --repeat-penalty 1.0"
+            assert macro_config.model_patterns["glm-4.7-flash"] == "glm-4-7-params"
+            assert (
+                macro_config.variants[0]["macro"]
+                == "${glm-4-7-params} --chat-template-kwargs '{\"enable_thinking\": false}'"
+            )
+        finally:
+            temp_path.unlink()
