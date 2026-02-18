@@ -54,7 +54,7 @@ model_patterns:
   gpt-oss-20b: gpt-oss-20b-params
   glm-47-flash: glm-47-params
   Qwen3-30B-A3B-Instruct-2507: qwen-context-large-params
-  Qwen3-Next-80B-A3B-Instruct: qwen-context-large-params
+  Qwen3-Next-80B-A3B: qwen-context-large-params
   gemma-3-27b: gemma-large-params
   Qwen3-Coder: qwen-coder-params
   StarCoder: qwen-coder-params
@@ -76,7 +76,7 @@ variants:
 - base_pattern: tokyotech-llm-Llama-3.3-Swallow-70B
   suffix: ' (short ctx)'
   macro: short-ctx-params
-- base_pattern: Qwen3-Next-80B-A3B-Instruct
+- base_pattern: Qwen3-Next-80B-A3B
   suffix: ' (with CPU)'
   macro: qwen-cpu-params-big
 - base_pattern: glm-4.7-flash
