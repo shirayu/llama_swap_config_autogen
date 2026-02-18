@@ -28,6 +28,7 @@ macros:
   cpu-offload-moe-24: --n-cpu-moe 24
   cpu-offload-moe-36: --n-cpu-moe 36
   cpu-offload-moe-default: ${cpu-offload-moe-12}
+  cpu-offload-threads: --threads 16
   temp-reasoning: --temp 0.7 --top-p 0.9
   temp-conding: --temp 0.1
   low-memory: --no-mmap --mlock
@@ -38,9 +39,9 @@ macros:
   gemma-large-params: ${default-params} ${layers-medium} ${context-medium}
   gpt-oss-120b-params: ${reasoning-base} ${layers-mini} --ctx-size 16384 --no-mmap
   qwen-coder-params: ${default-params} ${temp-coding} ${context-medium}
-  qwen-cpu-params: ${default-params} ${cpu-offload-moe-default} ${context-large}
+  qwen-cpu-params: ${default-params} ${cpu-offload-moe-default} ${cpu-offload-threads} ${context-large}
   short-ctx-params: ${default-params} ${context-short}
-  qwen-cpu-params-big: ${default-params} --n-gpu-layers 15 ${cpu-offload-moe-default} ${context-large}
+  qwen-cpu-params-big: ${default-params} --n-gpu-layers 15 ${cpu-offload-moe-default} ${cpu-offload-threads} ${context-large}
   qwen-context-large-params: ${default-params} ${context-large}
   memory-constrained-params: ${default-params} ${low-memory} ${memory-efficient}
   long-context-params: ${default-params} ${context-large}
