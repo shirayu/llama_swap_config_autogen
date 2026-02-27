@@ -41,6 +41,8 @@ macros:
   qwen-coder-params: ${default-params} ${temp-coding} ${context-medium}
   qwen-cpu-params: ${default-params} ${cpu-offload-moe-default} ${cpu-offload-threads} ${context-large}
   short-ctx-params: ${default-params} ${context-short}
+  thinking-off-params: >-
+    ${default-params} --chat-template-kwargs '{"enable_thinking": false}'
   qwen-cpu-params-big: ${default-params} --n-gpu-layers 15 ${cpu-offload-moe-default} ${cpu-offload-threads} ${context-large}
   qwen-context-large-params: ${default-params} ${context-large}
   memory-constrained-params: ${default-params} ${low-memory} ${memory-efficient}
@@ -73,6 +75,9 @@ variants:
 - base_pattern: Qwen3.5-35B-A3B
   suffix: ' (short ctx)'
   macro: short-ctx-params
+- base_pattern: Qwen3.5-35B-A3B
+  suffix: ' (thinking off)'
+  macro: thinking-off-params
 - base_pattern: gemma-3-27b-it-qat
   suffix: ' (short ctx)'
   macro: short-ctx-params
