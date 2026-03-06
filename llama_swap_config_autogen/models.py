@@ -7,11 +7,21 @@ import yaml
 from pydantic import BaseModel, Field
 
 
+class MmprojConfig(BaseModel):
+    enabled: bool = Field(default=True)
+    auto_attach: bool = Field(default=True)
+    arg: str = Field(default="--mmproj")
+    overrides: dict[str, Path] = Field(default_factory=dict)
+    generate_no_mmproj_variant: bool = Field(default=True)
+    no_mmproj_suffix: str = Field(default=" (no mmproj)")
+
+
 class Config(BaseModel):
     models: list[Path] = Field(description="List of model directory paths")
     macros: dict[str, str] = Field(default_factory=dict)
     model_patterns: dict[str, str] = Field(default_factory=dict)
     variants: list[dict[str, Any]] = Field(default_factory=list)
+    mmproj: MmprojConfig = Field(default_factory=MmprojConfig)
     default_ttl: int = Field(default=300)
     health_check_timeout: int = Field(default=240)
     log_level: str = Field(default="info")

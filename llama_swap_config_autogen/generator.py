@@ -1,9 +1,12 @@
 """YAML configuration generation logic."""
 
 import re
+from pathlib import Path
 
 from .config import load_macro_config
 from .models import Config, MacroConfig, MultilineLiteral, Settings, YamlModelConfig
+
+MMPROJ_PATTERN = re.compile(r"mmproj", re.IGNORECASE)
 
 
 def extract_model_name_from_url(filename: str) -> str:
@@ -40,30 +43,96 @@ def get_model_macro(model_name: str, macro_config: MacroConfig) -> str:
     return "default-params"
 
 
-def format_command_with_macro(model_path: str, macro_name: str) -> MultilineLiteral:
+def is_mmproj_file(path_model: Path) -> bool:
+    return bool(MMPROJ_PATTERN.search(path_model.name))
+
+
+def get_model_prefix(filename: str) -> str:
+    frn = filename.split("_", maxsplit=2)
+    if len(frn) < 2:
+        return Path(filename).stem
+    return f"{frn[0]}_{frn[1]}"
+
+
+def select_mmproj_path_for_model(
+    model_path: Path,
+    model_id: str,
+    display_name: str,
+    mmproj_overrides: dict[str, Path],
+    mmproj_by_prefix: dict[str, list[Path]],
+    auto_attach: bool,
+) -> Path | None:
+    override = (
+        mmproj_overrides.get(model_id) or mmproj_overrides.get(display_name) or mmproj_overrides.get(model_path.name)
+    )
+    if override:
+        return override
+
+    if not auto_attach:
+        return None
+
+    candidates = mmproj_by_prefix.get(get_model_prefix(model_path.name), [])
+    if len(candidates) == 1:
+        return candidates[0]
+
+    return None
+
+
+def format_suffix_for_id(suffix: str) -> str:
+    return suffix.replace(" ", "-").replace("(", "").replace(")", "").replace("+", "plus").lower()
+
+
+def format_command_with_macro(
+    model_path: str,
+    macro_name: str,
+    mmproj_path: str | None = None,
+    mmproj_arg: str = "--mmproj",
+) -> MultilineLiteral:
     """Generate command using macro (llama-swap format)"""
+    mmproj_part = f" {mmproj_arg} {mmproj_path}" if mmproj_path else ""
+
     # Check if macro_name already contains ${...} references (for complex macros)
     if macro_name.startswith("${") and macro_name.endswith("}"):
         # It's already a formatted macro expression, use as-is
-        cmd = f"${{binary}} -m {model_path} --port ${{PORT}} --host 0.0.0.0 {macro_name}"
+        cmd = f"${{binary}} -m {model_path} --port ${{PORT}} --host 0.0.0.0{mmproj_part} {macro_name}"
     else:
         # It's a simple macro name, wrap it with ${}
-        cmd = f"${{binary}} -m {model_path} --port ${{PORT}} --host 0.0.0.0 ${{{macro_name}}}"
+        cmd = f"${{binary}} -m {model_path} --port ${{PORT}} --host 0.0.0.0{mmproj_part} ${{{macro_name}}}"
     return MultilineLiteral(cmd)
 
 
-def generate_model_configs(settings: Settings) -> dict[str, YamlModelConfig]:
+def generate_model_configs(settings: Settings, config: Config) -> dict[str, YamlModelConfig]:
     # Load macro configuration
     macro_config = load_macro_config(settings.config_file)
 
     models = {}
     ids = set()
+    mmproj_config = config.mmproj
+    mmproj_overrides: dict[str, Path] = {}
+    for key, value in mmproj_config.overrides.items():
+        resolved = value if value.is_absolute() else (settings.config_file.parent / value).resolve()
+        if not resolved.exists():
+            raise ValueError(f"mmproj override path does not exist for '{key}': {resolved}")
+        mmproj_overrides[key] = resolved
 
     for models_dir in settings.models_dirs:
         if not models_dir.exists():
             continue
 
-        for path_model in sorted(models_dir.glob("*.gguf")):
+        discovered = sorted(set(models_dir.glob("*.gguf")) | set(models_dir.glob("*.GGUF")))
+        if mmproj_config.enabled:
+            model_files = [path for path in discovered if not is_mmproj_file(path)]
+            mmproj_files = [path for path in discovered if is_mmproj_file(path)]
+        else:
+            model_files = discovered
+            mmproj_files = []
+
+        mmproj_by_prefix: dict[str, list[Path]] = {}
+        for mmproj_path in mmproj_files:
+            prefix = get_model_prefix(mmproj_path.name)
+            mmproj_by_prefix.setdefault(prefix, []).append(mmproj_path)
+
+        for path_model in model_files:
             display_name = generate_simple_id(path_model.name)
             model_id = extract_model_name_from_url(path_model.name)
 
@@ -72,10 +141,31 @@ def generate_model_configs(settings: Settings) -> dict[str, YamlModelConfig]:
             ids.add(model_id)
 
             macro_name = get_model_macro(display_name, macro_config)
+            selected_mmproj_path = select_mmproj_path_for_model(
+                model_path=path_model,
+                model_id=model_id,
+                display_name=display_name,
+                mmproj_overrides=mmproj_overrides,
+                mmproj_by_prefix=mmproj_by_prefix,
+                auto_attach=mmproj_config.auto_attach,
+            )
 
-            cmd = format_command_with_macro(str(path_model), macro_name)
+            cmd = format_command_with_macro(
+                str(path_model),
+                macro_name,
+                mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
+                mmproj_arg=mmproj_config.arg,
+            )
 
             models[model_id] = YamlModelConfig(ttl=settings.default_ttl, cmd=cmd, name=display_name)
+            if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
+                no_mmproj_id = f"{model_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
+                no_mmproj_cmd = format_command_with_macro(str(path_model), macro_name)
+                models[no_mmproj_id] = YamlModelConfig(
+                    ttl=settings.default_ttl,
+                    cmd=no_mmproj_cmd,
+                    name=f"{display_name}{mmproj_config.no_mmproj_suffix}",
+                )
 
             # Generate variant models
             for variant in macro_config.variants:
@@ -85,19 +175,31 @@ def generate_model_configs(settings: Settings) -> dict[str, YamlModelConfig]:
 
                 if base_pattern.lower() in display_name.lower() and suffix and variant_macro:
                     # Generate variant_id in YAML key suitable format from model_id
-                    cleaned_suffix = (
-                        suffix.replace(" ", "-").replace("(", "").replace(")", "").replace("+", "plus").lower()
-                    )
+                    cleaned_suffix = format_suffix_for_id(suffix)
                     variant_id = f"{model_id}-{cleaned_suffix}"
                     variant_display_name = f"{display_name}{suffix}"
                     if variant_id not in models:  # Avoid duplicates
-                        variant_cmd = format_command_with_macro(str(path_model), variant_macro)
+                        variant_cmd = format_command_with_macro(
+                            str(path_model),
+                            variant_macro,
+                            mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
+                            mmproj_arg=mmproj_config.arg,
+                        )
                         models[variant_id] = YamlModelConfig(
                             ttl=settings.default_ttl, cmd=variant_cmd, name=variant_display_name
                         )
+                    if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
+                        no_mmproj_variant_id = f"{variant_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
+                        if no_mmproj_variant_id not in models:
+                            no_mmproj_variant_cmd = format_command_with_macro(str(path_model), variant_macro)
+                            models[no_mmproj_variant_id] = YamlModelConfig(
+                                ttl=settings.default_ttl,
+                                cmd=no_mmproj_variant_cmd,
+                                name=f"{variant_display_name}{mmproj_config.no_mmproj_suffix}",
+                            )
 
     if not models:
-        raise ValueError("No models found. Please check your models directory and ensure .gguf.json files exist.")
+        raise ValueError("No models found. Please check your models directory and ensure .gguf files exist.")
 
     return models
 
@@ -216,7 +318,7 @@ def extract_used_macros_from_commands(commands: list[str], all_macros: dict[str,
 
 def generate_full_config(settings: Settings, config: Config) -> dict:
     """Generate complete configuration in llama-swap format"""
-    models = generate_model_configs(settings)
+    models = generate_model_configs(settings, config)
     macro_config = load_macro_config(settings.config_file)
 
     # Create llama-swap format configuration

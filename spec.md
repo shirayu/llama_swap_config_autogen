@@ -25,6 +25,13 @@ variants:                            # optional
   - base_pattern: <substring>
     suffix: <display suffix>
     macro: <macro name or macro expression>
+mmproj:                              # optional
+  enabled: <bool>                    # default: true
+  auto_attach: <bool>                # default: true
+  arg: <string>                      # default: --mmproj
+  generate_no_mmproj_variant: <bool> # default: true
+  no_mmproj_suffix: <string>         # default: " (no mmproj)"
+  overrides: { <model-id|display-name|filename>: <path>, ... }
 
 default_ttl: <int>                   # optional, default: 300
 health_check_timeout: <int>          # optional, default: 240
@@ -72,6 +79,30 @@ start_port: <int>                    # optional, default: 9091
 - `health_check_timeout`: `240`
 - `log_level`: `"info"`
 - `start_port`: `9091`
+
+### 3.6 `mmproj` (optional)
+
+- Type: `object`
+- Fields:
+    - `enabled` (`bool`, default `true`)
+    - `auto_attach` (`bool`, default `true`)
+    - `arg` (`string`, default `--mmproj`)
+    - `generate_no_mmproj_variant` (`bool`, default `true`)
+    - `no_mmproj_suffix` (`string`, default `" (no mmproj)"`)
+    - `overrides` (`map[string, path]`, default `{}`)
+
+Behavior when `enabled: true`:
+
+- Files whose names contain `mmproj` are excluded from standalone model generation.
+- `--mmproj <path>` is appended to model commands when:
+    - an override exists for model ID, display name, or model filename, or
+    - `auto_attach: true` and there is exactly one `mmproj` candidate with the same `<user>_<repo>` filename prefix.
+- If `generate_no_mmproj_variant: true`, an additional model entry without `--mmproj` is generated for each model (and variant)
+  that had `mmproj` attached.
+
+Behavior when `enabled: false`:
+
+- Legacy behavior is kept: `mmproj` files are treated like normal `.gguf` model files.
 
 ## 4. Macro Resolution Rules
 

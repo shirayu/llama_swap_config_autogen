@@ -10,6 +10,14 @@ max_concurrent_models: 3
 preload_popular_models: true
 cleanup_interval: 60
 
+mmproj:
+  enabled: true
+  auto_attach: true
+  arg: --mmproj
+  generate_no_mmproj_variant: true
+  no_mmproj_suffix: ' (no mmproj)'
+  overrides: {}
+
 macros:
   # Runtime
   binary: /app/llama-server
