@@ -57,6 +57,25 @@ llama-swap-config-autogen generate --config base.yaml --output config.yaml
 
 The tool scans directories → finds all `.gguf` models → matches patterns → generates complete llama-swap config.
 
+### `base.yaml` spec
+
+`base.yaml` defines model directories, macro templates, pattern-based macro selection, and optional variants.
+For the full input format and behavior details, see [`spec.md`](./spec.md).
+
+Minimal example:
+
+```yaml
+models:
+  - /opt/data/llm/models
+
+macros:
+  binary: /app/llama-server
+  default-params: --jinja --flash-attn on --n-gpu-layers 999 --ctx-size 32768
+
+model_patterns:
+  Qwen: default-params
+```
+
 #### 4. Use it!
 
 ```bash
