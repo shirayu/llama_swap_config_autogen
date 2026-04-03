@@ -161,3 +161,28 @@ def test_generate_no_mmproj_variant_for_model_and_variants(tmp_path: Path):
     assert len(no_mmproj_entries) == 2
     for key in no_mmproj_entries:
         assert "--mmproj" not in model_entries[key]["cmd"]
+
+
+def test_mmproj_prefers_single_bf16_candidate_when_multiple_candidates_exist(tmp_path: Path):
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+
+    model_file = models_dir / "unsloth_gemma-4-31B-it-GGUF_gemma-4-31B-it-Q4_K_M.gguf"
+    bf16_mmproj_file = models_dir / "unsloth_gemma-4-31B-it-GGUF_mmproj-BF16.gguf"
+    f16_mmproj_file = models_dir / "unsloth_gemma-4-31B-it-GGUF_mmproj-F16.gguf"
+    _touch(model_file)
+    _touch(bf16_mmproj_file)
+    _touch(f16_mmproj_file)
+
+    config_path = tmp_path / "base.yaml"
+    _write_base_config(config_path, models_dir)
+
+    config = load_config(config_path)
+    settings = create_settings_from_config(config, config_path)
+    output = generate_full_config(settings, config)
+
+    model_id = "unsloth/gemma-4-31B-it:Q4_K_M"
+    assert model_id in output["models"]
+    assert "--mmproj" in output["models"][model_id]["cmd"]
+    assert str(bf16_mmproj_file) in output["models"][model_id]["cmd"]
+    assert str(f16_mmproj_file) not in output["models"][model_id]["cmd"]

@@ -7,6 +7,7 @@ from .config import load_macro_config
 from .models import Config, MacroConfig, MultilineLiteral, Settings, YamlModelConfig
 
 MMPROJ_PATTERN = re.compile(r"mmproj", re.IGNORECASE)
+BF16_PATTERN = re.compile(r"bf16", re.IGNORECASE)
 
 
 def extract_model_name_from_url(filename: str) -> str:
@@ -74,6 +75,10 @@ def select_mmproj_path_for_model(
     candidates = mmproj_by_prefix.get(get_model_prefix(model_path.name), [])
     if len(candidates) == 1:
         return candidates[0]
+    if len(candidates) > 1:
+        bf16_candidates = [candidate for candidate in candidates if BF16_PATTERN.search(candidate.name)]
+        if len(bf16_candidates) == 1:
+            return bf16_candidates[0]
 
     return None
 
