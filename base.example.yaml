@@ -95,42 +95,45 @@ model_patterns:
   gpt-oss-20b: gpt-oss-20b-params
 
 variants:
-  - base_pattern: qwen3-30b/instruct-2507
-    suffix: ' (with CPU)'
-    macro: qwen-cpu-params
-  - base_pattern: qwen3-30b/instruct-2507
-    suffix: ' (short ctx)'
-    macro: short-ctx-params
-  - base_pattern: qwen3.5-35b
-    suffix: ' (with CPU)'
-    macro: qwen-cpu-params
-  - base_pattern: qwen3.5-35b
-    suffix: ' (short ctx)'
-    macro: short-ctx-params
-  - base_pattern: qwen3.5-35b
-    suffix: ' (thinking off)'
-    macro: thinking-off-params
+  - base_pattern: gemma-3-27b
+    suffix: ' (Memory Efficient)'
+    macro: memory-constrained-params
   - base_pattern: gemma-3-27b/it-qat
     suffix: ' (short ctx)'
     macro: short-ctx-params
+  - base_pattern: gemma-4-
+    suffix: ' (thinking off)'
+    macro: thinking-off-params
+  - base_pattern: glm-4.7/flash
+    suffix: ' (thinking off)'
+    macro: glm-47-thinking-off-params
+  - base_pattern: r1-distill
+    suffix: ' (Fast)'
+    macro: ${deepseek-r1-params} ${inference-fast}
   - base_pattern: r1-distill-qwen-32b
     suffix: ' (short ctx)'
     macro: short-ctx-params
-  - base_pattern: swallow-70b/instruct
+  - base_pattern: qwen3-30b/instruct-2507
+    suffix: ' (with CPU)'
+    macro: qwen-cpu-params
+  - base_pattern: qwen3-30b/instruct-2507
     suffix: ' (short ctx)'
     macro: short-ctx-params
   - base_pattern: qwen3-next-80b
     suffix: ' (with CPU)'
     macro: qwen-cpu-params-big
-  - base_pattern: glm-4.7/flash
-    suffix: ' (thinking off)'
-    macro: glm-47-thinking-off-params
-  - base_pattern: gemma-3-27b
-    suffix: ' (Memory Efficient)'
-    macro: memory-constrained-params
-  - base_pattern: gemma-4-
+  - base_pattern: qwen3-next-80b
     suffix: ' (thinking off)'
     macro: thinking-off-params
-  - base_pattern: r1-distill
-    suffix: ' (Fast)'
-    macro: ${deepseek-r1-params} ${inference-fast}
+  - base_pattern: qwen3.5-35b
+    suffix: ' (with CPU)'
+    macro: qwen-cpu-params
+  - base_pattern: qwen3.5-35b
+    suffix: ' (short ctx)'
+    macro: short-ctx-params
+  - base_pattern: qwen3.5-35b
+    suffix: ' (thinking off)'
+    macro: thinking-off-params
+  - base_pattern: swallow-70b/instruct
+    suffix: ' (short ctx)'
+    macro: short-ctx-params
