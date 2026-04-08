@@ -249,9 +249,6 @@ class TestMacroNameNormalization:
             assert "glm-4-7-params" in macro_config.macros
             assert macro_config.macros["glm-wrapper"] == "${glm-4-7-params} --repeat-penalty 1.0"
             assert macro_config.model_patterns["glm-4.7-flash"] == "glm-4-7-params"
-            assert (
-                macro_config.variants[0]["macro"]
-                == "${glm-4-7-params} --reasoning off"
-            )
+            assert macro_config.variants[0]["macro"] == "${glm-4-7-params} --reasoning off"
         finally:
             temp_path.unlink()
