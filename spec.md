@@ -10,7 +10,7 @@ Generation flow:
 
 1. Scan model directories from `models`.
 2. Discover `*.gguf` files.
-3. Build model IDs and display names from the relative directory path and filename quantization suffix.
+3. Build model IDs and model names from the relative directory path and filename quantization suffix.
 4. Select a macro via `model_patterns` (or fallback to `default-params`).
 5. Apply optional `variants`.
 6. Emit only macros actually referenced by generated model commands.
@@ -142,14 +142,16 @@ For each discovered `.gguf` file:
 
 - Display name: derived from the relative directory path and lowercased.
 - Model ID: derived as `<relative-directory-path-lowercased>:<format>`.
+- Model name: derived as `<relative-directory-path-lowercased>:<format>`.
 - Quantization format: extracted from the filename suffix such as `Q4_K_M`, `Q8_0`, `BF16`, or `F16`.
+- Generated display names must be unique across all emitted model entries.
 - Duplicate model IDs are ignored after first occurrence.
 
 Examples:
 
-- `Qwen3-30B/Instruct-2507/model-Q4_K_M.gguf` -> display name `qwen3-30b/instruct-2507`
+- `Qwen3-30B/Instruct-2507/model-Q4_K_M.gguf` -> model name `qwen3-30b/instruct-2507:Q4_K_M`
 - `Qwen3-30B/Instruct-2507/model-Q4_K_M.gguf` -> model ID `qwen3-30b/instruct-2507:Q4_K_M`
-- `Gemma-4-31B/it/model-Q4_K_M.gguf` -> display name `gemma-4-31b/it`
+- `Gemma-4-31B/it/model-Q4_K_M.gguf` -> model name `gemma-4-31b/it:Q4_K_M`
 
 Note: Filenames no longer need to follow a `user_repo_...` naming convention, but they must still contain a recognizable
 quantization suffix for model ID generation.

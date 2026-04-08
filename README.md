@@ -94,11 +94,15 @@ Examples:
         unsloth_Qwen3-30B-A3B-Instruct-2507-GGUF_Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf
 ```
 
-Generated model IDs are built from the relative directory path plus the quantization suffix from the filename:
+Generated model IDs are built from the relative directory path plus the quantization suffix from the filename.
+Generated `name` values also include the quantization suffix:
 
 ```text
-qwen3-30b/instruct-2507:Q4_K_M
-deepseek-r1-distill-qwen-32b/distill:Q4_K_M
+model_id: qwen3-30b/instruct-2507:Q4_K_M
+name: qwen3-30b/instruct-2507:Q4_K_M
+
+model_id: deepseek-r1-distill-qwen-32b/distill:Q4_K_M
+name: deepseek-r1-distill-qwen-32b/distill:Q4_K_M
 ```
 
 Notes:
@@ -109,6 +113,8 @@ Notes:
   Expected depth is `model` or `model/variant`, with an optional ignored leading family directory.
 - A single `models:` entry must use one style consistently.
   Mixing `model/...` and `family/model/...` under the same root is treated as an error.
+- Generated `name` values must be unique.
+  Since quantization is included in `name`, different quantizations in the same directory are distinguished automatically.
 
 ### `base.yaml` spec
 

@@ -85,6 +85,10 @@ def build_model_id(models_dir: Path, model_path: Path, ignore_first_segment: boo
     return f"{display_name}:{quantization}"
 
 
+def build_model_name(display_name: str, quantization: str) -> str:
+    return f"{display_name}:{quantization}"
+
+
 def get_model_macro(model_name: str, macro_config: MacroConfig) -> str:
     """Get appropriate macro based on model name"""
     # Check model name patterns
@@ -151,12 +155,22 @@ def format_command_with_macro(
     return MultilineLiteral(cmd)
 
 
+def ensure_unique_model_name(model_name: str, model_id: str, name_to_id: dict[str, str]) -> None:
+    existing_id = name_to_id.get(model_name)
+    if existing_id and existing_id != model_id:
+        raise ValueError(
+            f"Duplicate model name '{model_name}' generated for model IDs '{existing_id}' and '{model_id}'"
+        )
+    name_to_id[model_name] = model_id
+
+
 def generate_model_configs(settings: Settings, config: Config) -> dict[str, YamlModelConfig]:
     # Load macro configuration
     macro_config = load_macro_config(settings.config_file)
 
     models = {}
     ids = set()
+    name_to_id: dict[str, str] = {}
     mmproj_config = config.mmproj
     mmproj_overrides: dict[str, Path] = {}
     for key, value in mmproj_config.overrides.items():
@@ -186,7 +200,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
 
         for path_model in model_files:
             display_name = build_display_name(models_dir, path_model, ignore_first_segment)
-            model_id = build_model_id(models_dir, path_model, ignore_first_segment)
+            quantization = extract_quantization_suffix(path_model.name)
+            model_id = f"{display_name}:{quantization}"
+            model_name = build_model_name(display_name, quantization)
 
             if model_id in ids:
                 continue
@@ -209,14 +225,17 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 mmproj_arg=mmproj_config.arg,
             )
 
-            models[model_id] = YamlModelConfig(ttl=settings.default_ttl, cmd=cmd, name=display_name)
+            ensure_unique_model_name(model_name, model_id, name_to_id)
+            models[model_id] = YamlModelConfig(ttl=settings.default_ttl, cmd=cmd, name=model_name)
             if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
                 no_mmproj_id = f"{model_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
                 no_mmproj_cmd = format_command_with_macro(str(path_model), macro_name)
+                no_mmproj_name = f"{model_name}{mmproj_config.no_mmproj_suffix}"
+                ensure_unique_model_name(no_mmproj_name, no_mmproj_id, name_to_id)
                 models[no_mmproj_id] = YamlModelConfig(
                     ttl=settings.default_ttl,
                     cmd=no_mmproj_cmd,
-                    name=f"{display_name}{mmproj_config.no_mmproj_suffix}",
+                    name=no_mmproj_name,
                 )
 
             # Generate variant models
@@ -229,7 +248,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     # Generate variant_id in YAML key suitable format from model_id
                     cleaned_suffix = format_suffix_for_id(suffix)
                     variant_id = f"{model_id}-{cleaned_suffix}"
-                    variant_display_name = f"{display_name}{suffix}"
+                    variant_display_name = f"{model_name}{suffix}"
                     if variant_id not in models:  # Avoid duplicates
                         variant_cmd = format_command_with_macro(
                             str(path_model),
@@ -237,6 +256,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
                             mmproj_arg=mmproj_config.arg,
                         )
+                        ensure_unique_model_name(variant_display_name, variant_id, name_to_id)
                         models[variant_id] = YamlModelConfig(
                             ttl=settings.default_ttl, cmd=variant_cmd, name=variant_display_name
                         )
@@ -244,10 +264,12 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         no_mmproj_variant_id = f"{variant_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
                         if no_mmproj_variant_id not in models:
                             no_mmproj_variant_cmd = format_command_with_macro(str(path_model), variant_macro)
+                            no_mmproj_variant_name = f"{variant_display_name}{mmproj_config.no_mmproj_suffix}"
+                            ensure_unique_model_name(no_mmproj_variant_name, no_mmproj_variant_id, name_to_id)
                             models[no_mmproj_variant_id] = YamlModelConfig(
                                 ttl=settings.default_ttl,
                                 cmd=no_mmproj_variant_cmd,
-                                name=f"{variant_display_name}{mmproj_config.no_mmproj_suffix}",
+                                name=no_mmproj_variant_name,
                             )
 
     if not models:

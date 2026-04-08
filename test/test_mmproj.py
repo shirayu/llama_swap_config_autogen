@@ -54,6 +54,7 @@ def test_mmproj_auto_attach_and_skip_as_standalone_model(tmp_path: Path):
     assert model_id in output["models"]
     assert "--mmproj" in output["models"][model_id]["cmd"]
     assert str(mmproj_file) in output["models"][model_id]["cmd"]
+    assert output["models"][model_id]["name"] == "qwen3.5-35b/standard:Q4_K_M"
     assert all(":F16" not in key for key in output["models"].keys())
     no_mmproj_entries = [k for k, v in output["models"].items() if v["name"].endswith("(no mmproj)")]
     assert len(no_mmproj_entries) == 1
@@ -93,7 +94,7 @@ def test_mmproj_override_applies_when_auto_attach_is_disabled(tmp_path: Path):
     assert str(override_mmproj) in output["models"][model_id]["cmd"]
 
 
-def test_mmproj_can_be_disabled_to_keep_legacy_behavior(tmp_path: Path):
+def test_quantization_is_included_in_generated_model_name(tmp_path: Path):
     models_dir = tmp_path / "models"
     target_dir = models_dir / "Qwen3.5-35B" / "standard"
     target_dir.mkdir(parents=True)
@@ -116,9 +117,8 @@ def test_mmproj_can_be_disabled_to_keep_legacy_behavior(tmp_path: Path):
     settings = create_settings_from_config(config, config_path)
     output = generate_full_config(settings, config)
 
-    assert "qwen3.5-35b/standard:Q4_K_M" in output["models"]
-    assert "qwen3.5-35b/standard:F16" in output["models"]
-    assert "--mmproj" not in output["models"]["qwen3.5-35b/standard:Q4_K_M"]["cmd"]
+    assert output["models"]["qwen3.5-35b/standard:Q4_K_M"]["name"] == "qwen3.5-35b/standard:Q4_K_M"
+    assert output["models"]["qwen3.5-35b/standard:F16"]["name"] == "qwen3.5-35b/standard:F16"
 
 
 def test_generate_no_mmproj_variant_for_model_and_variants(tmp_path: Path):
