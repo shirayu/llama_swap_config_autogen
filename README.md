@@ -57,6 +57,59 @@ llama-swap-config-autogen generate --config base.yaml --output config.yaml
 
 The tool scans directories → finds all `.gguf` models → matches patterns → generates complete llama-swap config.
 
+### Directory layout requirements
+
+The generator now treats the directory structure under each entry in `models:` as the source of truth for model naming.
+
+Supported layouts for each `models:` entry:
+
+```text
+<models_dir>/<model>/<file>.gguf
+<models_dir>/<model>/<variant>/<file>.gguf
+```
+
+If a `models:` entry is instead organized with one extra leading category directory, that first segment is ignored automatically:
+
+```text
+<models_dir>/<family>/<model>/<file>.gguf
+<models_dir>/<family>/<model>/<variant>/<file>.gguf
+```
+
+Examples:
+
+```text
+/opt/data/llm/models/Qwen/
+  Qwen3-30B/
+    Instruct-2507/
+      unsloth_Qwen3-30B-A3B-Instruct-2507-GGUF_Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf
+
+/opt/data/llm/models/
+  DeepSeek/
+    DeepSeek-R1-Distill-Qwen-32B/
+      Distill/
+        unsloth_DeepSeek-R1-Distill-Qwen-32B-GGUF_DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf
+  Qwen/
+    Qwen3-30B/
+      Instruct-2507/
+        unsloth_Qwen3-30B-A3B-Instruct-2507-GGUF_Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf
+```
+
+Generated model IDs are built from the relative directory path plus the quantization suffix from the filename:
+
+```text
+qwen3-30b/instruct-2507:Q4_K_M
+deepseek-r1-distill-qwen-32b/distill:Q4_K_M
+```
+
+Notes:
+
+- `mmproj` auto-attach is resolved within the same directory as the model file.
+- If the first directory segment is only a category such as `Qwen`, `Gemma`, or `DeepSeek`, it is ignored automatically.
+- If a `.gguf` file is placed at an unexpected depth, generation fails with an error.
+  Expected depth is `model` or `model/variant`, with an optional ignored leading family directory.
+- A single `models:` entry must use one style consistently.
+  Mixing `model/...` and `family/model/...` under the same root is treated as an error.
+
 ### `base.yaml` spec
 
 `base.yaml` defines model directories, macro templates, pattern-based macro selection, and optional variants.
@@ -74,7 +127,7 @@ macros:
   default-params: --jinja --flash-attn on --n-gpu-layers 999 --ctx-size 32768
 
 model_patterns:
-  Qwen: default-params
+  qwen3: default-params
 ```
 
 #### 4. Use it!

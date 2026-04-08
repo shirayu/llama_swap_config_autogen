@@ -1,5 +1,9 @@
 models:
   - /opt/data/llm/models
+  # Expected layout under each directory:
+  #   <model>/*.gguf
+  #   <model>/<variant>/*.gguf
+  # Any .gguf outside those depths will raise an error.
 
 default_ttl: 300
 health_check_timeout: 240
@@ -78,47 +82,47 @@ macros:
   glm-47-thinking-off-params: ${glm-47-params} --reasoning off
 
 model_patterns:
-  DeepSeek-R1-Distill: deepseek-r1-params
+  r1-distill-qwen-32b: deepseek-r1-params
   Phi-3: memory-constrained-params
-  Qwen3-30B-A3B-Instruct-2507: qwen-context-large-params
-  Qwen3-Coder: qwen-coder-params
-  Qwen3-Next-80B-A3B: qwen-context-large-params
+  qwen3-30b/instruct-2507: qwen-context-large-params
+  qwen3-30b/coder-instruct: qwen-coder-params
+  qwen3-next-80b: qwen-context-large-params
   StarCoder: qwen-coder-params
   TinyLlama: memory-constrained-params
   gemma-3-27b: gemma-large-params
-  glm-47-flash: glm-47-params
+  glm-4.7/flash: glm-47-params
   gpt-oss-120b: gpt-oss-120b-params
   gpt-oss-20b: gpt-oss-20b-params
 
 variants:
-  - base_pattern: Qwen3-30B-A3B-Instruct-2507
+  - base_pattern: qwen3-30b/instruct-2507
     suffix: ' (with CPU)'
     macro: qwen-cpu-params
-  - base_pattern: Qwen3-30B-A3B-Instruct-2507
+  - base_pattern: qwen3-30b/instruct-2507
     suffix: ' (short ctx)'
     macro: short-ctx-params
-  - base_pattern: Qwen3.5-35B-A3B
+  - base_pattern: qwen3.5-35b
     suffix: ' (with CPU)'
     macro: qwen-cpu-params
-  - base_pattern: Qwen3.5-35B-A3B
+  - base_pattern: qwen3.5-35b
     suffix: ' (short ctx)'
     macro: short-ctx-params
-  - base_pattern: Qwen3.5-35B-A3B
+  - base_pattern: qwen3.5-35b
     suffix: ' (thinking off)'
     macro: thinking-off-params
-  - base_pattern: gemma-3-27b-it-qat
+  - base_pattern: gemma-3-27b/it-qat
     suffix: ' (short ctx)'
     macro: short-ctx-params
-  - base_pattern: DeepSeek-R1-Distill-Qwen-32B
+  - base_pattern: r1-distill-qwen-32b
     suffix: ' (short ctx)'
     macro: short-ctx-params
-  - base_pattern: tokyotech-llm-Llama-3.3-Swallow-70B
+  - base_pattern: swallow-70b/instruct
     suffix: ' (short ctx)'
     macro: short-ctx-params
-  - base_pattern: Qwen3-Next-80B-A3B
+  - base_pattern: qwen3-next-80b
     suffix: ' (with CPU)'
     macro: qwen-cpu-params-big
-  - base_pattern: glm-4.7-flash
+  - base_pattern: glm-4.7/flash
     suffix: ' (thinking off)'
     macro: glm-47-thinking-off-params
   - base_pattern: gemma-3-27b
@@ -127,6 +131,6 @@ variants:
   - base_pattern: gemma-4-
     suffix: ' (thinking off)'
     macro: thinking-off-params
-  - base_pattern: DeepSeek-R1-Distill
+  - base_pattern: r1-distill
     suffix: ' (Fast)'
     macro: ${deepseek-r1-params} ${inference-fast}

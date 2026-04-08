@@ -8,36 +8,88 @@ from .models import Config, MacroConfig, MultilineLiteral, Settings, YamlModelCo
 
 MMPROJ_PATTERN = re.compile(r"mmproj", re.IGNORECASE)
 BF16_PATTERN = re.compile(r"bf16", re.IGNORECASE)
+QUANTIZATION_PATTERN = re.compile(r"-(Q\d(?:_[A-Z0-9]+)+|BF16|F16)(?=\.gguf$)", re.IGNORECASE)
 
 
-def extract_model_name_from_url(filename: str) -> str:
-    """Extract model name from HuggingFace URL or return fallback name."""
-
-    frn = filename.split("_", maxsplit=2)
-    if len(frn) < 3:
-        raise ValueError(f"Invalid filename: {filename}")
-
-    user, repo = frn[0], frn[1].replace("-gguf", "").replace("-GGUF", "")
-    parts = frn[-1].replace(".gguf", "").split("-")
-    fmt = parts[-4] if len(frn) >= 4 and parts[-2] == "of" else parts[-1]
-
-    return f"{user}/{repo}:{fmt}"
+def extract_quantization_suffix(filename: str) -> str:
+    """Extract quantization suffix such as Q4_K_M, BF16, or F16 from the filename."""
+    match = QUANTIZATION_PATTERN.search(filename)
+    if not match:
+        raise ValueError(f"Could not determine quantization suffix from filename: {filename}")
+    return match.group(1).upper()
 
 
-def generate_simple_id(filename: str) -> str:
-    """Generate simple ID directly from URL (without user, fmt prefix)"""
+def should_ignore_first_segment(models_dir: Path, model_files: list[Path]) -> bool:
+    if not model_files:
+        return False
 
-    frn = filename.split("_", maxsplit=2)[-1]
-    repo = frn.replace(".gguf", "").replace(".GGUF", "")  # Remove user, use repo only
+    per_top_level: dict[str, set[int]] = {}
+    for path in model_files:
+        parts = path.relative_to(models_dir).parent.parts
+        depth = len(parts)
+        if depth not in {1, 2, 3}:
+            raise ValueError(
+                f"Unexpected model directory depth for '{path}'. "
+                "Expected 'model/*.gguf' or 'model/variant/*.gguf', "
+                "with an optional ignored leading family directory."
+            )
+        per_top_level.setdefault(parts[0], set()).add(depth)
 
-    return f"{repo}".lower()
+    has_family_layout = False
+    has_direct_layout = False
+    has_ambiguous_layout = False
+
+    for depths in per_top_level.values():
+        if 3 in depths and 1 in depths:
+            raise ValueError(
+                f"Unexpected mixed model directory depths under '{models_dir}'. "
+                "Use one consistent layout style per models directory."
+            )
+        if 3 in depths:
+            has_family_layout = True
+        elif 1 in depths:
+            has_direct_layout = True
+        else:
+            has_ambiguous_layout = True
+
+    if has_family_layout and has_direct_layout:
+        raise ValueError(
+            f"Unexpected mixed model directory depths under '{models_dir}'. "
+            "Use one consistent layout style per models directory."
+        )
+    if has_family_layout and has_ambiguous_layout:
+        raise ValueError(
+            f"Unexpected mixed model directory depths under '{models_dir}'. "
+            "Use one consistent layout style per models directory."
+        )
+
+    return has_family_layout
+
+
+def build_display_name(models_dir: Path, model_path: Path, ignore_first_segment: bool) -> str:
+    relative_parent = model_path.relative_to(models_dir).parent
+    parts = relative_parent.parts[1:] if ignore_first_segment else relative_parent.parts
+    depth = len(parts)
+    if depth not in {1, 2}:
+        raise ValueError(
+            f"Unexpected model directory depth for '{model_path}'. "
+            "Expected 'model/*.gguf' or 'model/variant/*.gguf', "
+            "with an optional ignored leading family directory."
+        )
+    return "/".join(parts).lower()
+
+
+def build_model_id(models_dir: Path, model_path: Path, ignore_first_segment: bool) -> str:
+    display_name = build_display_name(models_dir, model_path, ignore_first_segment)
+    quantization = extract_quantization_suffix(model_path.name)
+    return f"{display_name}:{quantization}"
 
 
 def get_model_macro(model_name: str, macro_config: MacroConfig) -> str:
     """Get appropriate macro based on model name"""
     # Check model name patterns
     for pattern, macro_name in macro_config.model_patterns.items():
-        if pattern in model_name:
+        if pattern.lower() in model_name.lower():
             return macro_name
 
     # Use default parameters
@@ -46,13 +98,6 @@ def get_model_macro(model_name: str, macro_config: MacroConfig) -> str:
 
 def is_mmproj_file(path_model: Path) -> bool:
     return bool(MMPROJ_PATTERN.search(path_model.name))
-
-
-def get_model_prefix(filename: str) -> str:
-    frn = filename.split("_", maxsplit=2)
-    if len(frn) < 2:
-        return Path(filename).stem
-    return f"{frn[0]}_{frn[1]}"
 
 
 def select_mmproj_path_for_model(
@@ -72,7 +117,7 @@ def select_mmproj_path_for_model(
     if not auto_attach:
         return None
 
-    candidates = mmproj_by_prefix.get(get_model_prefix(model_path.name), [])
+    candidates = mmproj_by_prefix.get(str(model_path.parent), [])
     if len(candidates) == 1:
         return candidates[0]
     if len(candidates) > 1:
@@ -124,7 +169,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
         if not models_dir.exists():
             continue
 
-        discovered = sorted(set(models_dir.glob("*.gguf")) | set(models_dir.glob("*.GGUF")))
+        discovered = sorted(set(models_dir.rglob("*.gguf")) | set(models_dir.rglob("*.GGUF")))
         if mmproj_config.enabled:
             model_files = [path for path in discovered if not is_mmproj_file(path)]
             mmproj_files = [path for path in discovered if is_mmproj_file(path)]
@@ -132,14 +177,16 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
             model_files = discovered
             mmproj_files = []
 
+        ignore_first_segment = should_ignore_first_segment(models_dir, model_files)
+
         mmproj_by_prefix: dict[str, list[Path]] = {}
         for mmproj_path in mmproj_files:
-            prefix = get_model_prefix(mmproj_path.name)
+            prefix = str(mmproj_path.parent)
             mmproj_by_prefix.setdefault(prefix, []).append(mmproj_path)
 
         for path_model in model_files:
-            display_name = generate_simple_id(path_model.name)
-            model_id = extract_model_name_from_url(path_model.name)
+            display_name = build_display_name(models_dir, path_model, ignore_first_segment)
+            model_id = build_model_id(models_dir, path_model, ignore_first_segment)
 
             if model_id in ids:
                 continue

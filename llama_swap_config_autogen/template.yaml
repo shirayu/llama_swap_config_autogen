@@ -2,6 +2,10 @@
 # Edit this file to match your environment
 
 # List of directories where models are stored (required)
+# Expected layout under each directory:
+#   <model>/*.gguf
+#   <model>/<variant>/*.gguf
+# Any .gguf outside those depths will raise an error.
 models:
   - /opt/llama.cpp/models
   # - /home/user/models  # Add additional directories if any
@@ -72,18 +76,22 @@ macros:
   "long-context-params": "${default-params} ${context-large}"
 
 # Model name patterns and macro mapping
+# Patterns are matched case-insensitively against the generated display name,
+# which is the lowercased relative directory path such as:
+#   qwen3-30b/instruct-2507
+#   gemma-4-31b/it
 model_patterns:
   # Reasoning-focused models
-  "DeepSeek-R1-Distill": "deepseek-r1-params"
+  "r1-distill": "deepseek-r1-params"
   "gpt-oss-120b": "gpt-oss-120b-params"
   "gpt-oss-20b": "gpt-oss-20b-params"
 
   # General-purpose large models
-  "Qwen3-30B-A3B-Instruct-2507": "qwen-context-large-params"
+  "qwen3-30b/instruct-2507": "qwen-context-large-params"
   "gemma-3-27b": "gemma-large-params"
 
   # Coding-focused models
-  "Qwen3-Coder": "qwen-coder-params"
+  "qwen3-30b/coder-instruct": "qwen-coder-params"
   "StarCoder": "qwen-coder-params"
 
   # Lightweight models (for memory-constrained environments)
@@ -94,7 +102,7 @@ model_patterns:
 # Automatically generate variations of the same model with different settings
 variants:
   # CPU variant
-  - base_pattern: "Qwen3-30B-A3B-Instruct-2507"
+  - base_pattern: "qwen3-30b/instruct-2507"
     suffix: " (with CPU)"
     macro: "qwen-cpu-params"
 
@@ -104,6 +112,6 @@ variants:
     macro: "memory-constrained-params"
 
   # Fast inference variant
-  - base_pattern: "DeepSeek-R1-Distill"
+  - base_pattern: "r1-distill"
     suffix: " (Fast)"
     macro: "${deepseek-r1-params} ${inference-fast}"

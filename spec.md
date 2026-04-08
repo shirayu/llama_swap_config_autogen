@@ -10,7 +10,7 @@ Generation flow:
 
 1. Scan model directories from `models`.
 2. Discover `*.gguf` files.
-3. Build model IDs and display names from filenames.
+3. Build model IDs and display names from the relative directory path and filename quantization suffix.
 4. Select a macro via `model_patterns` (or fallback to `default-params`).
 5. Apply optional `variants`.
 6. Emit only macros actually referenced by generated model commands.
@@ -46,6 +46,14 @@ start_port: <int>                    # optional, default: 9091
 - Type: `list[path]`
 - Meaning: Directories to scan for `.gguf` files.
 - Behavior: Non-existent directories are skipped.
+- Directory layout requirements:
+    - `<models_dir>/<model>/<file>.gguf`
+    - `<models_dir>/<model>/<variant>/<file>.gguf`
+    - `<models_dir>/<family>/<model>/<file>.gguf`
+    - `<models_dir>/<family>/<model>/<variant>/<file>.gguf`
+- When the family layout is used, the first path segment is ignored for naming.
+- A single `models` entry must use one layout style consistently.
+- Any `.gguf` file outside those depths, or any mixed style under one root, causes generation to fail with an error.
 
 ### 3.2 `macros` (optional)
 
@@ -96,7 +104,7 @@ Behavior when `enabled: true`:
 - Files whose names contain `mmproj` are excluded from standalone model generation.
 - `--mmproj <path>` is appended to model commands when:
     - an override exists for model ID, display name, or model filename, or
-    - `auto_attach: true` and there is exactly one `mmproj` candidate with the same `<user>_<repo>` filename prefix.
+    - `auto_attach: true` and there is exactly one `mmproj` candidate in the same directory as the model file.
 - If `generate_no_mmproj_variant: true`, an additional model entry without `--mmproj` is generated for each model (and variant)
   that had `mmproj` attached.
 
@@ -132,11 +140,19 @@ If `<macro>` is already an expression like `${a} ${b}`, it is used as-is.
 
 For each discovered `.gguf` file:
 
-- Display name: derived from filename tail and lowercased.
-- Model ID: derived as `<user>/<repo>:<format>`.
+- Display name: derived from the relative directory path and lowercased.
+- Model ID: derived as `<relative-directory-path-lowercased>:<format>`.
+- Quantization format: extracted from the filename suffix such as `Q4_K_M`, `Q8_0`, `BF16`, or `F16`.
 - Duplicate model IDs are ignored after first occurrence.
 
-Note: The parser expects filenames that follow the project’s HuggingFace-export style naming convention. Invalid names may raise an error.
+Examples:
+
+- `Qwen3-30B/Instruct-2507/model-Q4_K_M.gguf` -> display name `qwen3-30b/instruct-2507`
+- `Qwen3-30B/Instruct-2507/model-Q4_K_M.gguf` -> model ID `qwen3-30b/instruct-2507:Q4_K_M`
+- `Gemma-4-31B/it/model-Q4_K_M.gguf` -> display name `gemma-4-31b/it`
+
+Note: Filenames no longer need to follow a `user_repo_...` naming convention, but they must still contain a recognizable
+quantization suffix for model ID generation.
 
 ## 6. Generated Output Mapping
 
@@ -177,10 +193,10 @@ macros:
   qwen-cpu: ${default-params} --n-cpu-moe 12 --threads 16 --ctx-size 65536
 
 model_patterns:
-  Qwen3: default-params
+  qwen3: default-params
 
 variants:
-  - base_pattern: Qwen3
+  - base_pattern: qwen3
     suffix: " (with CPU)"
     macro: qwen-cpu
 ```
