@@ -126,6 +126,9 @@ variants:
   - base_pattern: gemma-3-27b
     suffix: ' (Memory Efficient)'
     macro: memory-constrained-params
+  - base_pattern: gemma-4-
+    suffix: ' (thinking off)'
+    macro: thinking-off-params
   - base_pattern: DeepSeek-R1-Distill
     suffix: ' (Fast)'
     macro: ${deepseek-r1-params} ${inference-fast}
