@@ -74,10 +74,8 @@ macros:
   short-ctx-params: ${default-params} ${context-short}
   long-context-params: ${default-params} ${context-large}
   memory-constrained-params: ${default-params} ${low-memory} ${memory-efficient}
-  thinking-off-params: >-
-    ${default-params} --chat-template-kwargs '{"enable_thinking": false}'
-  glm-47-thinking-off-params: >-
-    ${glm-47-params} --chat-template-kwargs '{"enable_thinking": false}'
+  thinking-off-params: ${default-params} --reasoning off
+  glm-47-thinking-off-params: ${glm-47-params} --reasoning off
 
 model_patterns:
   DeepSeek-R1-Distill: deepseek-r1-params

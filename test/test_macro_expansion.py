@@ -235,7 +235,7 @@ class TestMacroNameNormalization:
                 {
                     "base_pattern": "glm-4.7-flash",
                     "suffix": " (thinking off)",
-                    "macro": "${glm.4.7-params} --chat-template-kwargs '{\"enable_thinking\": false}'",
+                    "macro": "${glm.4.7-params} --reasoning off",
                 }
             ],
         }
@@ -251,7 +251,7 @@ class TestMacroNameNormalization:
             assert macro_config.model_patterns["glm-4.7-flash"] == "glm-4-7-params"
             assert (
                 macro_config.variants[0]["macro"]
-                == "${glm-4-7-params} --chat-template-kwargs '{\"enable_thinking\": false}'"
+                == "${glm-4-7-params} --reasoning off"
             )
         finally:
             temp_path.unlink()
