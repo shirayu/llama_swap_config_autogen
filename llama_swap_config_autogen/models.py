@@ -26,6 +26,7 @@ class Config(BaseModel):
     health_check_timeout: int = Field(default=240)
     log_level: str = Field(default="info")
     start_port: int = Field(default=9091)
+    vram_estimation: bool = Field(default=False)
 
 
 class MacroConfig(BaseModel):
@@ -41,6 +42,7 @@ class Settings(BaseModel):
     log_level: str = Field(default="info")
     start_port: int = Field(default=9091)
     config_file: Path
+    vram_estimation: bool = Field(default=False)
 
 
 class MultilineLiteral(str):

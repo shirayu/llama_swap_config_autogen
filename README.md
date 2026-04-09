@@ -105,6 +105,15 @@ model_id: deepseek-r1-distill-qwen-32b/distill:Q4_K_M
 name: deepseek-r1-distill-qwen-32b/distill:Q4_K_M
 ```
 
+When `vram_estimation: true` is set, the estimated GPU VRAM usage is appended to each model name:
+
+```text
+name: qwen3-30b/instruct-2507:Q4_K_M [12.3 GB]
+```
+
+The estimate is based on GPU offload layers (`-ngl`) and context length (`-c` / `--ctx-size`) resolved from the expanded macro, plus model architecture metadata read from the GGUF file header.
+Metadata is cached in `~/.cache/llama_swap_config_autogen/gguf_metadata.json` and invalidated automatically when the file changes.
+
 Notes:
 
 - `mmproj` auto-attach is resolved within the same directory as the model file.
@@ -130,10 +139,23 @@ models:
 
 macros:
   binary: /app/llama-server
-  default-params: --jinja --flash-attn on --n-gpu-layers 999 --ctx-size 32768
+  default-params: --jinja --flash-attn on -ngl 999 --ctx-size 32768
 
 model_patterns:
   qwen3: default-params
+```
+
+To enable VRAM estimation:
+
+```yaml
+vram_estimation: true  # default: false
+
+models:
+  - /opt/data/llm/models
+
+macros:
+  binary: /app/llama-server
+  default-params: --jinja --flash-attn on -ngl 999 --ctx-size 32768
 ```
 
 #### 4. Use it!
@@ -147,6 +169,9 @@ llama-swap --config ./config.yaml --watch-config -listen 0.0.0.0:9090
 ```bash
 # Validation
 llama-swap-config-autogen validate config.yaml
+
+# Verbose VRAM estimation details
+llama-swap-config-autogen generate --config base.yaml --verbose
 ```
 
 ## License

@@ -9,6 +9,7 @@ default_ttl: 300
 health_check_timeout: 240
 log_level: warn
 start_port: 9091
+vram_estimation: true
 
 max_concurrent_models: 3
 preload_popular_models: true

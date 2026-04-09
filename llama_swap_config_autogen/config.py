@@ -98,4 +98,5 @@ def create_settings_from_config(config: Config, config_file: Path) -> Settings:
         log_level=config.log_level,
         start_port=config.start_port,
         config_file=config_file,
+        vram_estimation=config.vram_estimation,
     )

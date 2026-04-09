@@ -1,6 +1,7 @@
 """Command line interface for llama-swap YAML generator."""
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -84,6 +85,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Output file path (default: print to stdout)",
     )
+    generate_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose logging (show VRAM estimation details)",
+    )
 
     # validate サブコマンド
     validate_parser = subparsers.add_parser("validate", help="Validate llama-swap YAML configuration")
@@ -119,6 +126,8 @@ def main() -> None:
 
     # Process generate subcommand
     if args.command == "generate":
+        log_level = logging.DEBUG if args.verbose else logging.INFO
+        logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s", stream=sys.stderr)
         config = load_config(args.config)
         settings = create_settings_from_config(config, args.config)
         output_config = generate_full_config(settings, config)

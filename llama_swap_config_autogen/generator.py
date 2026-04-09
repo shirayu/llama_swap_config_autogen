@@ -1,14 +1,20 @@
 """YAML configuration generation logic."""
 
+import logging
 import re
 from pathlib import Path
 
 from .config import load_macro_config
+from .gguf_metadata import GGUFMetadataCache, estimate_vram_gb, get_gguf_metadata
 from .models import Config, MacroConfig, MultilineLiteral, Settings, YamlModelConfig
+
+logger = logging.getLogger(__name__)
 
 MMPROJ_PATTERN = re.compile(r"mmproj", re.IGNORECASE)
 BF16_PATTERN = re.compile(r"bf16", re.IGNORECASE)
 QUANTIZATION_PATTERN = re.compile(r"-(Q\d(?:_[A-Z0-9]+)+|BF16|F16)(?=\.gguf$)", re.IGNORECASE)
+NGL_PATTERN = re.compile(r"-ngl\s+(\d+)")
+CONTEXT_PATTERN = re.compile(r"(?:-c|--ctx-size)\s+(\d+)")
 
 
 def extract_quantization_suffix(filename: str) -> str:
@@ -164,6 +170,38 @@ def ensure_unique_model_name(model_name: str, model_id: str, name_to_id: dict[st
     name_to_id[model_name] = model_id
 
 
+def extract_ngl(cmd: str) -> int:
+    """Extract -ngl value from command string. Returns 0 if not found."""
+    match = NGL_PATTERN.search(cmd)
+    return int(match.group(1)) if match else 0
+
+
+def extract_context_length(cmd: str, fallback: int) -> int:
+    """Extract -c / --ctx-size value from command string. Returns fallback if not found."""
+    match = CONTEXT_PATTERN.search(cmd)
+    return int(match.group(1)) if match else fallback
+
+
+def build_vram_label(path_model: Path, cmd: str, metadata_fallback_ctx: int, cache: GGUFMetadataCache) -> str | None:
+    """Return a VRAM label like '[12.3 GB]', or None if estimation fails."""
+    try:
+        metadata = get_gguf_metadata(path_model, cache)
+        ngl = extract_ngl(cmd)
+        ctx = extract_context_length(cmd, metadata_fallback_ctx or metadata.context_length or 4096)
+        vram_gb = estimate_vram_gb(
+            metadata=metadata,
+            file_size_bytes=path_model.stat().st_size,
+            ngl=ngl,
+            context_length=ctx,
+        )
+        label = f"[{vram_gb:.1f} GB]"
+        logger.info("VRAM estimate for %s: %s (ngl=%d, ctx=%d)", path_model.name, label, ngl, ctx)
+        return label
+    except Exception as e:
+        logger.warning("Could not estimate VRAM for %s: %s", path_model.name, e)
+        return None
+
+
 def generate_model_configs(settings: Settings, config: Config) -> dict[str, YamlModelConfig]:
     # Load macro configuration
     macro_config = load_macro_config(settings.config_file)
@@ -178,6 +216,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
         if not resolved.exists():
             raise ValueError(f"mmproj override path does not exist for '{key}': {resolved}")
         mmproj_overrides[key] = resolved
+
+    metadata_cache = GGUFMetadataCache.load() if settings.vram_estimation else None
+    cache_dirty = False
 
     for models_dir in settings.models_dirs:
         if not models_dir.exists():
@@ -225,12 +266,24 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 mmproj_arg=mmproj_config.arg,
             )
 
-            ensure_unique_model_name(model_name, model_id, name_to_id)
-            models[model_id] = YamlModelConfig(ttl=settings.default_ttl, cmd=cmd, name=model_name)
+            # Expand macro to resolve -ngl and -c values for VRAM estimation
+            vram_label = None
+            if metadata_cache is not None:
+                expanded_cmd = (
+                    expand_macro(macro_name, macro_config.macros) if macro_name in macro_config.macros else str(cmd)
+                )
+                before_count = len(metadata_cache.entries)
+                vram_label = build_vram_label(path_model, expanded_cmd, 0, metadata_cache)
+                if len(metadata_cache.entries) != before_count:
+                    cache_dirty = True
+            full_name = f"{model_name} {vram_label}" if vram_label else model_name
+
+            ensure_unique_model_name(full_name, model_id, name_to_id)
+            models[model_id] = YamlModelConfig(ttl=settings.default_ttl, cmd=cmd, name=full_name)
             if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
                 no_mmproj_id = f"{model_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
                 no_mmproj_cmd = format_command_with_macro(str(path_model), macro_name)
-                no_mmproj_name = f"{model_name}{mmproj_config.no_mmproj_suffix}"
+                no_mmproj_name = f"{full_name}{mmproj_config.no_mmproj_suffix}"
                 ensure_unique_model_name(no_mmproj_name, no_mmproj_id, name_to_id)
                 models[no_mmproj_id] = YamlModelConfig(
                     ttl=settings.default_ttl,
@@ -248,7 +301,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     # Generate variant_id in YAML key suitable format from model_id
                     cleaned_suffix = format_suffix_for_id(suffix)
                     variant_id = f"{model_id}-{cleaned_suffix}"
-                    variant_display_name = f"{model_name}{suffix}"
+                    variant_display_name = f"{full_name}{suffix}"
                     if variant_id not in models:  # Avoid duplicates
                         variant_cmd = format_command_with_macro(
                             str(path_model),
@@ -256,21 +309,41 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
                             mmproj_arg=mmproj_config.arg,
                         )
-                        ensure_unique_model_name(variant_display_name, variant_id, name_to_id)
+                        # Estimate VRAM for variant (different macro = different ngl possibly)
+                        variant_vram_label = None
+                        if metadata_cache is not None:
+                            expanded_variant_cmd = (
+                                expand_macro(variant_macro, macro_config.macros)
+                                if variant_macro in macro_config.macros
+                                else str(variant_cmd)
+                            )
+                            before_count = len(metadata_cache.entries)
+                            variant_vram_label = build_vram_label(path_model, expanded_variant_cmd, 0, metadata_cache)
+                            if len(metadata_cache.entries) != before_count:
+                                cache_dirty = True
+                        variant_full_name = (
+                            f"{model_name}{suffix} {variant_vram_label}" if variant_vram_label else variant_display_name
+                        )
+                        ensure_unique_model_name(variant_full_name, variant_id, name_to_id)
                         models[variant_id] = YamlModelConfig(
-                            ttl=settings.default_ttl, cmd=variant_cmd, name=variant_display_name
+                            ttl=settings.default_ttl, cmd=variant_cmd, name=variant_full_name
                         )
                     if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
                         no_mmproj_variant_id = f"{variant_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
                         if no_mmproj_variant_id not in models:
                             no_mmproj_variant_cmd = format_command_with_macro(str(path_model), variant_macro)
-                            no_mmproj_variant_name = f"{variant_display_name}{mmproj_config.no_mmproj_suffix}"
+                            existing_variant = models.get(variant_id)
+                            base_variant_name = existing_variant.name if existing_variant else variant_display_name
+                            no_mmproj_variant_name = f"{base_variant_name}{mmproj_config.no_mmproj_suffix}"
                             ensure_unique_model_name(no_mmproj_variant_name, no_mmproj_variant_id, name_to_id)
                             models[no_mmproj_variant_id] = YamlModelConfig(
                                 ttl=settings.default_ttl,
                                 cmd=no_mmproj_variant_cmd,
                                 name=no_mmproj_variant_name,
                             )
+
+    if cache_dirty and metadata_cache is not None:
+        metadata_cache.save()
 
     if not models:
         raise ValueError("No models found. Please check your models directory and ensure .gguf files exist.")
