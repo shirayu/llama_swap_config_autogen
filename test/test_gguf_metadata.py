@@ -1,6 +1,7 @@
 """Tests for GGUF metadata cache and VRAM estimation."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import yaml
@@ -8,7 +9,9 @@ import yaml
 from llama_swap_config_autogen.config import create_settings_from_config, load_config
 from llama_swap_config_autogen.generator import (
     build_vram_label,
+    estimate_cpu_offload_gpu_ratio,
     expand_macro_expression,
+    extract_cache_type_bytes,
     extract_context_length,
     extract_ngl,
     generate_full_config,
@@ -16,6 +19,7 @@ from llama_swap_config_autogen.generator import (
 from llama_swap_config_autogen.gguf_metadata import (
     GGUFMetadata,
     GGUFMetadataCache,
+    _read_gguf_metadata,
     estimate_vram_gb,
 )
 
@@ -33,6 +37,11 @@ def _make_metadata(
     head_dim: int = 128,
     context_length: int = 4096,
     embedding_length: int = 4096,
+    expert_count: int = 0,
+    expert_used_count: int = 0,
+    feed_forward_length: int = 0,
+    expert_feed_forward_length: int = 0,
+    expert_shared_feed_forward_length: int = 0,
 ) -> GGUFMetadata:
     return GGUFMetadata(
         mtime=mtime,
@@ -43,6 +52,11 @@ def _make_metadata(
         head_dim=head_dim,
         context_length=context_length,
         embedding_length=embedding_length,
+        expert_count=expert_count,
+        expert_used_count=expert_used_count,
+        feed_forward_length=feed_forward_length,
+        expert_feed_forward_length=expert_feed_forward_length,
+        expert_shared_feed_forward_length=expert_shared_feed_forward_length,
     )
 
 
@@ -74,6 +88,31 @@ class TestExtractContextLength:
 
     def test_fallback(self):
         assert extract_context_length("no context flag here", fallback=4096) == 4096
+
+
+class TestExtractCacheTypeBytes:
+    def test_defaults_to_fp16(self):
+        assert extract_cache_type_bytes("--ctx-size 4096") == (2.0, 2.0)
+
+    def test_extracts_q8_and_q4(self):
+        assert extract_cache_type_bytes("--cache-type-k q8_0 --cache-type-v q4_0") == (1.0, 0.5)
+
+
+class TestCpuOffloadEstimation:
+    def test_returns_none_without_moe_metadata(self):
+        meta = _make_metadata()
+        assert estimate_cpu_offload_gpu_ratio(meta, "--n-cpu-moe 12") is None
+
+    def test_estimates_partial_cpu_offload(self):
+        meta = _make_metadata(
+            expert_count=128,
+            expert_used_count=8,
+            feed_forward_length=6144,
+            expert_feed_forward_length=768,
+        )
+        ratio = estimate_cpu_offload_gpu_ratio(meta, "--n-cpu-moe 12")
+        assert ratio is not None
+        assert 0.8 < ratio < 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +157,25 @@ class TestEstimateVramGb:
         small = estimate_vram_gb(meta, 4 * 1024**3, ngl=32, context_length=4096)
         large = estimate_vram_gb(meta, 4 * 1024**3, ngl=32, context_length=32768)
         assert large > small
+
+    def test_quantized_kv_cache_reduces_vram(self):
+        meta = _make_metadata(num_layers=32, num_heads_kv=8, head_dim=128)
+        fp16 = estimate_vram_gb(meta, 4 * 1024**3, ngl=32, context_length=32768)
+        quantized = estimate_vram_gb(
+            meta,
+            4 * 1024**3,
+            ngl=32,
+            context_length=32768,
+            k_cache_bytes=1.0,
+            v_cache_bytes=0.5,
+        )
+        assert quantized < fp16
+
+    def test_mmproj_increases_vram(self):
+        meta = _make_metadata(num_layers=32, num_heads_kv=8, head_dim=128)
+        base = estimate_vram_gb(meta, 4 * 1024**3, ngl=32, context_length=4096)
+        with_mmproj = estimate_vram_gb(meta, 4 * 1024**3, ngl=32, context_length=4096, extra_gpu_bytes=512 * 1024**2)
+        assert with_mmproj > base
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +242,70 @@ class TestGGUFMetadataCache:
             cache = GGUFMetadataCache.load()
         assert cache.entries == {}
 
+
+class TestReadGgufMetadata:
+    def test_handles_array_like_field_contents(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00")
+
+        class FakeField:
+            def __init__(self, name, value):
+                self.name = name
+                self._value = value
+
+            def contents(self, index_or_slice=0):
+                return self._value
+
+        fake_fields = {
+            "qwen2.block_count": FakeField("qwen2.block_count", [32]),
+            "qwen2.attention.head_count": FakeField("qwen2.attention.head_count", [32]),
+            "qwen2.attention.head_count_kv": FakeField("qwen2.attention.head_count_kv", [8]),
+            "qwen2.embedding_length": FakeField("qwen2.embedding_length", [4096]),
+            "qwen2.context_length": FakeField("qwen2.context_length", [131072]),
+        }
+        fake_reader = SimpleNamespace(fields=fake_fields)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta = _read_gguf_metadata(model)
+
+        assert meta.num_layers == 32
+        assert meta.num_heads == 32
+        assert meta.num_heads_kv == 8
+        assert meta.embedding_length == 4096
+        assert meta.context_length == 131072
+        assert meta.head_dim == 128
+
+    def test_discovers_non_fallback_arch_prefix(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00")
+
+        class FakeField:
+            def __init__(self, name, value):
+                self.name = name
+                self._value = value
+
+            def contents(self, index_or_slice=0):
+                return self._value
+
+        fake_fields = {
+            "qwen3.block_count": FakeField("qwen3.block_count", 48),
+            "qwen3.attention.head_count": FakeField("qwen3.attention.head_count", 40),
+            "qwen3.attention.head_count_kv": FakeField("qwen3.attention.head_count_kv", 8),
+            "qwen3.embedding_length": FakeField("qwen3.embedding_length", 5120),
+            "qwen3.context_length": FakeField("qwen3.context_length", 40960),
+        }
+        fake_reader = SimpleNamespace(fields=fake_fields)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta = _read_gguf_metadata(model)
+
+        assert meta.num_layers == 48
+        assert meta.num_heads == 40
+        assert meta.num_heads_kv == 8
+        assert meta.embedding_length == 5120
+        assert meta.context_length == 40960
+        assert meta.head_dim == 128
+
     def test_load_returns_empty_when_no_file(self, tmp_path):
         cache_file = tmp_path / "missing.json"
         with patch("llama_swap_config_autogen.gguf_metadata.CACHE_PATH", cache_file):
@@ -242,7 +364,60 @@ class TestBuildVramLabel:
         import re
 
         assert label is not None
-        assert re.match(r"^\[\d+\.\d GB\]$", label)
+        assert re.match(r"^\[\d+\.\d GB\??\]$", label)
+
+    def test_low_confidence_label_has_question_mark(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 100)
+        cache = GGUFMetadataCache()
+        stat = model.stat()
+        meta = _make_metadata(mtime=stat.st_mtime, size=stat.st_size, head_dim=0)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", return_value=meta):
+            label = build_vram_label(model, "--n-gpu-layers 32 -c 4096", 4096, cache)
+
+        assert label is not None
+        assert label.endswith("GB?]")
+
+    def test_mmproj_is_reflected_in_label(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 1024)
+        mmproj = tmp_path / "mmproj.gguf"
+        mmproj.write_bytes(b"\x00" * (512 * 1024**2))
+        cache = GGUFMetadataCache()
+        stat = model.stat()
+        meta = _make_metadata(mtime=stat.st_mtime, size=stat.st_size)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", return_value=meta):
+            base = build_vram_label(model, "--n-gpu-layers 32 -c 4096", 4096, cache)
+            with_mmproj = build_vram_label(model, "--n-gpu-layers 32 -c 4096", 4096, cache, mmproj_path=mmproj)
+
+        assert base is not None and with_mmproj is not None
+        assert with_mmproj != base
+
+    def test_cpu_offload_label_can_be_high_confidence(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * (4 * 1024**3 // 100))
+        cache = GGUFMetadataCache()
+        stat = model.stat()
+        meta = _make_metadata(
+            mtime=stat.st_mtime,
+            size=stat.st_size,
+            expert_count=128,
+            expert_used_count=8,
+            feed_forward_length=6144,
+            expert_feed_forward_length=768,
+        )
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", return_value=meta):
+            base = build_vram_label(model, "--n-gpu-layers 32 --ctx-size 65536", 4096, cache)
+            cpu = build_vram_label(model, "--n-gpu-layers 32 --n-cpu-moe 12 --ctx-size 65536", 4096, cache)
+
+        assert base is not None and cpu is not None
+        assert "?" not in cpu
+        ratio = estimate_cpu_offload_gpu_ratio(meta, "--n-cpu-moe 12")
+        assert ratio is not None
+        assert ratio < 1.0
 
 
 class TestExpandMacroExpression:

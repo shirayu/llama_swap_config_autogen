@@ -15,6 +15,10 @@ BF16_PATTERN = re.compile(r"bf16", re.IGNORECASE)
 QUANTIZATION_PATTERN = re.compile(r"-(Q\d(?:_[A-Z0-9]+)+|BF16|F16)(?=\.gguf$)", re.IGNORECASE)
 NGL_PATTERN = re.compile(r"(?:-ngl|--n-gpu-layers)\s+(\d+)")
 CONTEXT_PATTERN = re.compile(r"(?:-c|--ctx-size)\s+(\d+)")
+CACHE_TYPE_K_PATTERN = re.compile(r"--cache-type-k\s+([^\s]+)")
+CACHE_TYPE_V_PATTERN = re.compile(r"--cache-type-v\s+([^\s]+)")
+CPU_OFFLOAD_PATTERN = re.compile(r"(?:--cpu-moe|--n-cpu-moe\b|-ot\b[^\n]*=CPU)", re.IGNORECASE)
+N_CPU_MOE_PATTERN = re.compile(r"--n-cpu-moe\s+(\d+)")
 
 
 def extract_quantization_suffix(filename: str) -> str:
@@ -194,20 +198,122 @@ def expand_macro_expression(expression: str, all_macros: dict[str, str]) -> str:
     return deduplicate_parameters(expanded)
 
 
-def build_vram_label(path_model: Path, cmd: str, metadata_fallback_ctx: int, cache: GGUFMetadataCache) -> str | None:
+def cache_type_to_bytes(cache_type: str | None, default: float = 2.0) -> float:
+    """Map llama.cpp cache type names to approximate bytes per element."""
+    if not cache_type:
+        return default
+
+    normalized = cache_type.lower()
+    mapping = {
+        "f16": 2.0,
+        "fp16": 2.0,
+        "bf16": 2.0,
+        "q8_0": 1.0,
+        "q8": 1.0,
+        "q6_k": 0.75,
+        "q5_0": 0.625,
+        "q5_1": 0.625,
+        "q5_k": 0.625,
+        "q4_0": 0.5,
+        "q4_1": 0.5,
+        "q4_k": 0.5,
+    }
+    return mapping.get(normalized, default)
+
+
+def extract_cache_type_bytes(cmd: str) -> tuple[float, float]:
+    k_match = CACHE_TYPE_K_PATTERN.search(cmd)
+    v_match = CACHE_TYPE_V_PATTERN.search(cmd)
+    return (
+        cache_type_to_bytes(k_match.group(1) if k_match else None),
+        cache_type_to_bytes(v_match.group(1) if v_match else None),
+    )
+
+
+def estimate_cpu_offload_gpu_ratio(metadata, cmd: str) -> float | None:
+    """Estimate the fraction of model weights that remain on GPU after CPU offload flags."""
+    if not CPU_OFFLOAD_PATTERN.search(cmd):
+        return 1.0
+
+    expert_count = getattr(metadata, "expert_count", 0)
+    expert_ffn = getattr(metadata, "expert_feed_forward_length", 0)
+    dense_ffn = getattr(metadata, "feed_forward_length", 0)
+    shared_ffn = getattr(metadata, "expert_shared_feed_forward_length", 0)
+
+    if expert_count <= 0 or expert_ffn <= 0:
+        return None
+
+    expert_total = expert_count * expert_ffn
+    total_ffn = expert_total + dense_ffn + shared_ffn
+    if total_ffn <= 0:
+        return None
+
+    moe_weight_share = expert_total / total_ffn
+
+    if re.search(r"-ot\b[^\n]*ffn_.*_exps\.\=CPU", cmd):
+        offloaded_expert_fraction = 1.0
+    elif "--cpu-moe" in cmd and "--n-cpu-moe" not in cmd:
+        offloaded_expert_fraction = 1.0
+    else:
+        match = N_CPU_MOE_PATTERN.search(cmd)
+        if not match:
+            return None
+        offloaded_expert_fraction = min(1.0, int(match.group(1)) / expert_count)
+
+    gpu_ratio = 1.0 - (moe_weight_share * offloaded_expert_fraction)
+    return max(0.0, min(1.0, gpu_ratio))
+
+
+def is_vram_estimate_low_confidence(metadata, cmd: str) -> bool:
+    return (
+        metadata.num_layers == 0
+        or metadata.num_heads == 0
+        or metadata.num_heads_kv == 0
+        or metadata.head_dim == 0
+        or (bool(CPU_OFFLOAD_PATTERN.search(cmd)) and estimate_cpu_offload_gpu_ratio(metadata, cmd) is None)
+    )
+
+
+def build_vram_label(
+    path_model: Path,
+    cmd: str,
+    metadata_fallback_ctx: int,
+    cache: GGUFMetadataCache,
+    mmproj_path: Path | None = None,
+) -> str | None:
     """Return a VRAM label like '[12.3 GB]', or None if estimation fails."""
     try:
         metadata = get_gguf_metadata(path_model, cache)
         ngl = extract_ngl(cmd)
         ctx = extract_context_length(cmd, metadata_fallback_ctx or metadata.context_length or 4096)
+        k_cache_bytes, v_cache_bytes = extract_cache_type_bytes(cmd)
+        extra_gpu_bytes = mmproj_path.stat().st_size if mmproj_path else 0
+        cpu_gpu_ratio = estimate_cpu_offload_gpu_ratio(metadata, cmd)
+        effective_file_size = path_model.stat().st_size
+        if cpu_gpu_ratio is not None:
+            effective_file_size = int(effective_file_size * cpu_gpu_ratio)
         vram_gb = estimate_vram_gb(
             metadata=metadata,
-            file_size_bytes=path_model.stat().st_size,
+            file_size_bytes=effective_file_size,
             ngl=ngl,
             context_length=ctx,
+            k_cache_bytes=k_cache_bytes,
+            v_cache_bytes=v_cache_bytes,
+            extra_gpu_bytes=extra_gpu_bytes,
         )
-        label = f"[{vram_gb:.1f} GB]"
-        logger.info("VRAM estimate for %s: %s (ngl=%d, ctx=%d)", path_model.name, label, ngl, ctx)
+        confidence_suffix = "?" if is_vram_estimate_low_confidence(metadata, cmd) else ""
+        label = f"[{vram_gb:.1f} GB{confidence_suffix}]"
+        logger.info(
+            "VRAM estimate for %s: %s (ngl=%d, ctx=%d, cache-k=%.3f, cache-v=%.3f, mmproj=%d, cpu-gpu-ratio=%s)",
+            path_model.name,
+            label,
+            ngl,
+            ctx,
+            k_cache_bytes,
+            v_cache_bytes,
+            extra_gpu_bytes,
+            f"{cpu_gpu_ratio:.3f}" if cpu_gpu_ratio is not None else "unknown",
+        )
         return label
     except Exception as e:
         logger.warning("Could not estimate VRAM for %s: %s", path_model.name, e)
@@ -283,7 +389,13 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
             if metadata_cache is not None:
                 expanded_cmd = expand_macro_expression(macro_name, macro_config.macros)
                 before_count = len(metadata_cache.entries)
-                vram_label = build_vram_label(path_model, expanded_cmd, 0, metadata_cache)
+                vram_label = build_vram_label(
+                    path_model,
+                    expanded_cmd,
+                    0,
+                    metadata_cache,
+                    mmproj_path=selected_mmproj_path,
+                )
                 if len(metadata_cache.entries) != before_count:
                     cache_dirty = True
             full_name = f"{model_name} {vram_label}" if vram_label else model_name
@@ -324,7 +436,13 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         if metadata_cache is not None:
                             expanded_variant_cmd = expand_macro_expression(variant_macro, macro_config.macros)
                             before_count = len(metadata_cache.entries)
-                            variant_vram_label = build_vram_label(path_model, expanded_variant_cmd, 0, metadata_cache)
+                            variant_vram_label = build_vram_label(
+                                path_model,
+                                expanded_variant_cmd,
+                                0,
+                                metadata_cache,
+                                mmproj_path=selected_mmproj_path,
+                            )
                             if len(metadata_cache.entries) != before_count:
                                 cache_dirty = True
                         variant_full_name = (
