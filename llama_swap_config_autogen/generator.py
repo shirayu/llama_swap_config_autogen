@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 MMPROJ_PATTERN = re.compile(r"mmproj", re.IGNORECASE)
 BF16_PATTERN = re.compile(r"bf16", re.IGNORECASE)
 QUANTIZATION_PATTERN = re.compile(r"-(Q\d(?:_[A-Z0-9]+)+|BF16|F16)(?=\.gguf$)", re.IGNORECASE)
-NGL_PATTERN = re.compile(r"-ngl\s+(\d+)")
+NGL_PATTERN = re.compile(r"(?:-ngl|--n-gpu-layers)\s+(\d+)")
 CONTEXT_PATTERN = re.compile(r"(?:-c|--ctx-size)\s+(\d+)")
 
 
@@ -182,6 +182,18 @@ def extract_context_length(cmd: str, fallback: int) -> int:
     return int(match.group(1)) if match else fallback
 
 
+def expand_macro_expression(expression: str, all_macros: dict[str, str]) -> str:
+    """Expand either a macro name or an arbitrary expression containing ${...} references."""
+    if expression in all_macros:
+        return expand_macro(expression, all_macros)
+
+    expanded = expression
+    for macro_name in re.findall(r"\$\{([^}]+)\}", expression):
+        if macro_name in all_macros:
+            expanded = expanded.replace(f"${{{macro_name}}}", expand_macro(macro_name, all_macros))
+    return deduplicate_parameters(expanded)
+
+
 def build_vram_label(path_model: Path, cmd: str, metadata_fallback_ctx: int, cache: GGUFMetadataCache) -> str | None:
     """Return a VRAM label like '[12.3 GB]', or None if estimation fails."""
     try:
@@ -269,9 +281,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
             # Expand macro to resolve -ngl and -c values for VRAM estimation
             vram_label = None
             if metadata_cache is not None:
-                expanded_cmd = (
-                    expand_macro(macro_name, macro_config.macros) if macro_name in macro_config.macros else str(cmd)
-                )
+                expanded_cmd = expand_macro_expression(macro_name, macro_config.macros)
                 before_count = len(metadata_cache.entries)
                 vram_label = build_vram_label(path_model, expanded_cmd, 0, metadata_cache)
                 if len(metadata_cache.entries) != before_count:
@@ -312,11 +322,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         # Estimate VRAM for variant (different macro = different ngl possibly)
                         variant_vram_label = None
                         if metadata_cache is not None:
-                            expanded_variant_cmd = (
-                                expand_macro(variant_macro, macro_config.macros)
-                                if variant_macro in macro_config.macros
-                                else str(variant_cmd)
-                            )
+                            expanded_variant_cmd = expand_macro_expression(variant_macro, macro_config.macros)
                             before_count = len(metadata_cache.entries)
                             variant_vram_label = build_vram_label(path_model, expanded_variant_cmd, 0, metadata_cache)
                             if len(metadata_cache.entries) != before_count:

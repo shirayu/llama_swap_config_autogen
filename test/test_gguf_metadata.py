@@ -8,6 +8,7 @@ import yaml
 from llama_swap_config_autogen.config import create_settings_from_config, load_config
 from llama_swap_config_autogen.generator import (
     build_vram_label,
+    expand_macro_expression,
     extract_context_length,
     extract_ngl,
     generate_full_config,
@@ -53,6 +54,9 @@ def _make_metadata(
 class TestExtractNgl:
     def test_found(self):
         assert extract_ngl("llama-server -m model.gguf -ngl 99 --port 8080") == 99
+
+    def test_found_long_flag(self):
+        assert extract_ngl("llama-server -m model.gguf --n-gpu-layers 25 --port 8080") == 25
 
     def test_not_found(self):
         assert extract_ngl("llama-server -m model.gguf --port 8080") == 0
@@ -241,6 +245,20 @@ class TestBuildVramLabel:
         assert re.match(r"^\[\d+\.\d GB\]$", label)
 
 
+class TestExpandMacroExpression:
+    def test_expands_plain_macro_name(self):
+        macros = {"default-params": "--n-gpu-layers 999 --ctx-size 32768"}
+        assert expand_macro_expression("default-params", macros) == "--n-gpu-layers 999 --ctx-size 32768"
+
+    def test_expands_composite_expression(self):
+        macros = {
+            "deepseek-r1-params": "--n-gpu-layers 999 --ctx-size 32768",
+            "inference-fast": "--batch-size 512 --ubatch-size 512",
+        }
+        result = expand_macro_expression("${deepseek-r1-params} ${inference-fast}", macros)
+        assert result == "--n-gpu-layers 999 --ctx-size 32768 --batch-size 512 --ubatch-size 512"
+
+
 # ---------------------------------------------------------------------------
 # Integration: model name contains VRAM label
 # ---------------------------------------------------------------------------
@@ -355,3 +373,36 @@ class TestVramLabelInGeneratedConfig:
             generate_full_config(settings, config)
 
         assert saved.get("called"), "cache.save() was not called after new entries were added"
+
+    def test_variant_composite_macro_includes_vram_label(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "deepseek-r1-distill-qwen-32b"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "distill-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            extra={
+                "model_patterns": {"deepseek-r1-distill-qwen-32b": "default-params"},
+                "variants": [
+                    {
+                        "base_pattern": "r1-distill",
+                        "suffix": " (Fast)",
+                        "macro": "${default-params} --batch-size 512",
+                    }
+                ],
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=self._fake_get_metadata):
+            result = generate_full_config(settings, config)
+
+        fast_names = [v["name"] for model_id, v in result["models"].items() if model_id.endswith("-fast")]
+        assert fast_names, "Fast variant was not generated"
+        assert all("GB]" in name for name in fast_names), f"Variant VRAM label missing: {fast_names}"
