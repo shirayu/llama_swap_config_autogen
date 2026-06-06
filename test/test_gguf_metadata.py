@@ -86,6 +86,9 @@ class TestExtractContextLength:
     def test_long_flag(self):
         assert extract_context_length("--ctx-size 16384", fallback=4096) == 16384
 
+    def test_zero_uses_fallback(self):
+        assert extract_context_length("-c 0", fallback=32768) == 32768
+
     def test_fallback(self):
         assert extract_context_length("no context flag here", fallback=4096) == 4096
 
@@ -581,3 +584,219 @@ class TestVramLabelInGeneratedConfig:
         fast_names = [v["name"] for model_id, v in result["models"].items() if model_id.endswith("-fast")]
         assert fast_names, "Fast variant was not generated"
         assert all("GB]" in name for name in fast_names), f"Variant VRAM label missing: {fast_names}"
+
+
+class TestVramEstimationEdgeCases:
+    def test_ctx_zero_uses_metadata_context_length(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * (4 * 1024**3 // 100))
+        cache = GGUFMetadataCache()
+        stat = model.stat()
+        meta = _make_metadata(mtime=stat.st_mtime, size=stat.st_size, context_length=32768)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", return_value=meta):
+            explicit = build_vram_label(model, "--n-gpu-layers 32 --ctx-size 32768", 0, cache)
+            ctx_zero = build_vram_label(model, "--n-gpu-layers 32 -c 0", 0, cache)
+
+        assert ctx_zero == explicit
+
+    def test_no_mmproj_variant_recalculates_vram_without_mmproj(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "gemma"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "gemma-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * (1024 * 1024))
+        mmproj_file = model_dir / "mmproj-F16.gguf"
+        mmproj_file.write_bytes(b"\x00" * (512 * 1024**2))
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            extra={
+                "mmproj": {
+                    "enabled": True,
+                    "auto_attach": True,
+                    "generate_no_mmproj_variant": True,
+                }
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        stat = model_file.stat()
+        meta = _make_metadata(mtime=stat.st_mtime, size=stat.st_size)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", return_value=meta):
+            result = generate_full_config(settings, config)
+
+        with_mmproj = result["models"]["gemma:Q4_K_M"]["name"]
+        no_mmproj = result["models"]["gemma:Q4_K_M--no-mmproj"]["name"]
+
+        assert with_mmproj != no_mmproj.removesuffix(" (no mmproj)")
+
+    def test_model_patterns_can_match_generated_model_id(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "Gemma-4-12B"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
+        model_file.write_bytes(b"\x00")
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "macros": {
+                    "binary": "/app/llama-server",
+                    "default-params": "--ctx-size 32768",
+                    "gemma-12b-xl-params": "--ctx-size 16384",
+                },
+                "model_patterns": {
+                    "gemma-4-12b:Q4_K_XL": "gemma-12b-xl-params",
+                },
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        assert "${gemma-12b-xl-params}" in result["models"]["gemma-4-12b:Q4_K_XL"]["cmd"]
+
+    def test_model_patterns_can_match_filename(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "Gemma-4-12B"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
+        model_file.write_bytes(b"\x00")
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "macros": {
+                    "binary": "/app/llama-server",
+                    "default-params": "--ctx-size 32768",
+                    "qat-params": "--ctx-size 16384",
+                },
+                "model_patterns": {
+                    "it-qat-UD-Q4_K_XL": "qat-params",
+                },
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        assert "${qat-params}" in result["models"]["gemma-4-12b:Q4_K_XL"]["cmd"]
+
+    def test_model_patterns_still_match_display_name(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "Gemma-4-12B"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "gemma-4-12B-it-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00")
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "macros": {
+                    "binary": "/app/llama-server",
+                    "default-params": "--ctx-size 32768",
+                    "gemma-params": "--ctx-size 16384",
+                },
+                "model_patterns": {
+                    "gemma-4-12b": "gemma-params",
+                },
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        assert "${gemma-params}" in result["models"]["gemma-4-12b:Q4_K_M"]["cmd"]
+
+    def test_variants_can_match_generated_model_id(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "Gemma-4-12B"
+        model_dir.mkdir(parents=True)
+        q4_xl = model_dir / "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
+        q4_m = model_dir / "gemma-4-12B-it-Q4_K_M.gguf"
+        q4_xl.write_bytes(b"\x00")
+        q4_m.write_bytes(b"\x00")
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "macros": {
+                    "binary": "/app/llama-server",
+                    "default-params": "--ctx-size 32768",
+                    "short-ctx-params": "--ctx-size 4096",
+                },
+                "variants": [
+                    {
+                        "base_pattern": "gemma-4-12b:Q4_K_XL",
+                        "suffix": " (short ctx)",
+                        "macro": "short-ctx-params",
+                    }
+                ],
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        assert "gemma-4-12b:Q4_K_XL--short-ctx" in result["models"]
+        assert "gemma-4-12b:Q4_K_M--short-ctx" not in result["models"]
+        assert "${short-ctx-params}" in result["models"]["gemma-4-12b:Q4_K_XL--short-ctx"]["cmd"]
+
+    def test_variants_can_match_filename(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "Gemma-4-12B"
+        model_dir.mkdir(parents=True)
+        qat = model_dir / "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
+        regular = model_dir / "gemma-4-12B-it-Q4_K_M.gguf"
+        qat.write_bytes(b"\x00")
+        regular.write_bytes(b"\x00")
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "macros": {
+                    "binary": "/app/llama-server",
+                    "default-params": "--ctx-size 32768",
+                    "short-ctx-params": "--ctx-size 4096",
+                },
+                "variants": [
+                    {
+                        "base_pattern": "it-qat-UD-Q4_K_XL",
+                        "suffix": " (short ctx)",
+                        "macro": "short-ctx-params",
+                    }
+                ],
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        assert "gemma-4-12b:Q4_K_XL--short-ctx" in result["models"]
+        assert "gemma-4-12b:Q4_K_M--short-ctx" not in result["models"]
+        assert len(result["models"]) == 3

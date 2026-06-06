@@ -101,14 +101,18 @@ def build_model_name(display_name: str, quantization: str) -> str:
     return f"{display_name}:{quantization}"
 
 
-def get_model_macro(model_name: str, macro_config: MacroConfig) -> str:
-    """Get appropriate macro based on model name"""
-    # Check model name patterns
+def matches_model_pattern(pattern: str, *model_identifiers: str) -> bool:
+    normalized_pattern = pattern.lower()
+    return any(normalized_pattern in identifier.lower() for identifier in model_identifiers)
+
+
+def get_model_macro(model_name: str, macro_config: MacroConfig, *model_identifiers: str) -> str:
+    """Get appropriate macro based on model identifiers."""
+    match_targets = (*model_identifiers, model_name)
     for pattern, macro_name in macro_config.model_patterns.items():
-        if pattern.lower() in model_name.lower():
+        if matches_model_pattern(pattern, *match_targets):
             return macro_name
 
-    # Use default parameters
     return "default-params"
 
 
@@ -188,7 +192,10 @@ def extract_ngl(cmd: str) -> int:
 def extract_context_length(cmd: str, fallback: int) -> int:
     """Extract -c / --ctx-size value from command string. Returns fallback if not found."""
     match = CONTEXT_PATTERN.search(cmd)
-    return int(match.group(1)) if match else fallback
+    if not match:
+        return fallback
+    value = int(match.group(1))
+    return fallback if value == 0 else value
 
 
 def expand_macro_expression(expression: str, all_macros: dict[str, str]) -> str:
@@ -372,7 +379,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 continue
             ids.add(model_id)
 
-            macro_name = get_model_macro(display_name, macro_config)
+            macro_name = get_model_macro(display_name, macro_config, model_id, path_model.name)
             selected_mmproj_path = select_mmproj_path_for_model(
                 model_path=path_model,
                 model_id=model_id,
@@ -410,7 +417,15 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
             if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
                 no_mmproj_id = f"{model_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
                 no_mmproj_cmd = format_command_with_macro(str(path_model), macro_name)
-                no_mmproj_name = f"{full_name}{mmproj_config.no_mmproj_suffix}"
+                no_mmproj_vram_label = None
+                if metadata_cache is not None:
+                    expanded_cmd = expand_macro_expression(macro_name, macro_config.macros)
+                    before_count = len(metadata_cache.entries)
+                    no_mmproj_vram_label = build_vram_label(path_model, expanded_cmd, 0, metadata_cache)
+                    if len(metadata_cache.entries) != before_count:
+                        cache_dirty = True
+                no_mmproj_base_name = f"{model_name} {no_mmproj_vram_label}" if no_mmproj_vram_label else model_name
+                no_mmproj_name = f"{no_mmproj_base_name}{mmproj_config.no_mmproj_suffix}"
                 ensure_unique_model_name(no_mmproj_name, no_mmproj_id, name_to_id)
                 models[no_mmproj_id] = YamlModelConfig(
                     ttl=settings.default_ttl,
@@ -424,7 +439,11 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 suffix = variant.get("suffix", "")
                 variant_macro = variant.get("macro", "")
 
-                if base_pattern.lower() in display_name.lower() and suffix and variant_macro:
+                if (
+                    matches_model_pattern(base_pattern, model_id, path_model.name, display_name)
+                    and suffix
+                    and variant_macro
+                ):
                     # Generate variant_id in YAML key suitable format from model_id
                     cleaned_suffix = format_suffix_for_id(suffix)
                     variant_id = f"{model_id}-{cleaned_suffix}"
@@ -461,8 +480,22 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         no_mmproj_variant_id = f"{variant_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
                         if no_mmproj_variant_id not in models:
                             no_mmproj_variant_cmd = format_command_with_macro(str(path_model), variant_macro)
-                            existing_variant = models.get(variant_id)
-                            base_variant_name = existing_variant.name if existing_variant else variant_display_name
+                            no_mmproj_variant_vram_label = None
+                            if metadata_cache is not None:
+                                expanded_variant_cmd = expand_macro_expression(variant_macro, macro_config.macros)
+                                before_count = len(metadata_cache.entries)
+                                no_mmproj_variant_vram_label = build_vram_label(
+                                    path_model,
+                                    expanded_variant_cmd,
+                                    0,
+                                    metadata_cache,
+                                )
+                                if len(metadata_cache.entries) != before_count:
+                                    cache_dirty = True
+                            if no_mmproj_variant_vram_label:
+                                base_variant_name = f"{model_name}{suffix} {no_mmproj_variant_vram_label}"
+                            else:
+                                base_variant_name = variant_display_name
                             no_mmproj_variant_name = f"{base_variant_name}{mmproj_config.no_mmproj_suffix}"
                             ensure_unique_model_name(no_mmproj_variant_name, no_mmproj_variant_id, name_to_id)
                             models[no_mmproj_variant_id] = YamlModelConfig(
