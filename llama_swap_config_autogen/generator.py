@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 MMPROJ_PATTERN = re.compile(r"mmproj", re.IGNORECASE)
 BF16_PATTERN = re.compile(r"bf16", re.IGNORECASE)
+F16_PATTERN = re.compile(r"(?<!b)f16", re.IGNORECASE)
+F32_PATTERN = re.compile(r"f32", re.IGNORECASE)
 QUANTIZATION_PATTERN = re.compile(r"-(Q\d(?:_[A-Z0-9]+)+|BF16|F16)(?=\.gguf$)", re.IGNORECASE)
 NGL_PATTERN = re.compile(r"(?:-ngl|--n-gpu-layers)\s+(\d+)")
 CONTEXT_PATTERN = re.compile(r"(?:-c|--ctx-size)\s+(\d+)")
@@ -135,9 +137,12 @@ def select_mmproj_path_for_model(
     if len(candidates) == 1:
         return candidates[0]
     if len(candidates) > 1:
-        bf16_candidates = [candidate for candidate in candidates if BF16_PATTERN.search(candidate.name)]
-        if len(bf16_candidates) == 1:
-            return bf16_candidates[0]
+        for precision_pattern in (BF16_PATTERN, F16_PATTERN, F32_PATTERN):
+            precision_candidates = [candidate for candidate in candidates if precision_pattern.search(candidate.name)]
+            if len(precision_candidates) == 1:
+                return precision_candidates[0]
+            if len(precision_candidates) > 1:
+                return None
 
     return None
 

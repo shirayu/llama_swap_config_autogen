@@ -117,6 +117,9 @@ Metadata is cached in `~/.cache/llama_swap_config_autogen/gguf_metadata.json` an
 Notes:
 
 - `mmproj` auto-attach is resolved within the same directory as the model file.
+  When multiple `mmproj` files are present, the auto-attach preference is `BF16`, then `F16`, then `F32`, but only when the preferred precision has exactly one candidate.
+  Recommended practice is to keep a single `BF16` `mmproj` file next to each multimodal model when available; use `F16` if `BF16` is unavailable, and keep `F32` only when you explicitly need it.
+  If multiple files of the same preferred precision are present, set `mmproj.overrides` explicitly.
 - If the first directory segment is only a category such as `Qwen`, `Gemma`, or `DeepSeek`, it is ignored automatically.
 - If a `.gguf` file is placed at an unexpected depth, generation fails with an error.
   Expected depth is `model` or `model/variant`, with an optional ignored leading family directory.

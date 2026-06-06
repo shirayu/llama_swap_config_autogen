@@ -193,6 +193,84 @@ def test_mmproj_prefers_single_bf16_candidate_when_multiple_candidates_exist(tmp
     assert str(f16_mmproj_file) not in output["models"][model_id]["cmd"]
 
 
+def test_mmproj_prefers_f16_then_f32_when_higher_precision_candidate_is_absent(tmp_path: Path):
+    models_dir = tmp_path / "models"
+    target_dir = models_dir / "Gemma-4-31B" / "it"
+    target_dir.mkdir(parents=True)
+
+    model_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_gemma-4-31B-it-Q4_K_M.gguf"
+    f16_mmproj_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_mmproj-F16.gguf"
+    f32_mmproj_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_mmproj-F32.gguf"
+    _touch(model_file)
+    _touch(f16_mmproj_file)
+    _touch(f32_mmproj_file)
+
+    config_path = tmp_path / "base.yaml"
+    _write_base_config(config_path, models_dir)
+
+    config = load_config(config_path)
+    settings = create_settings_from_config(config, config_path)
+    output = generate_full_config(settings, config)
+
+    model_id = "gemma-4-31b/it:Q4_K_M"
+    assert model_id in output["models"]
+    assert "--mmproj" in output["models"][model_id]["cmd"]
+    assert str(f16_mmproj_file) in output["models"][model_id]["cmd"]
+    assert str(f32_mmproj_file) not in output["models"][model_id]["cmd"]
+
+
+def test_mmproj_prefers_f32_when_it_is_the_only_tagged_candidate(tmp_path: Path):
+    models_dir = tmp_path / "models"
+    target_dir = models_dir / "Gemma-4-31B" / "it"
+    target_dir.mkdir(parents=True)
+
+    model_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_gemma-4-31B-it-Q4_K_M.gguf"
+    f32_mmproj_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_mmproj-F32.gguf"
+    other_mmproj_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_mmproj.gguf"
+    _touch(model_file)
+    _touch(f32_mmproj_file)
+    _touch(other_mmproj_file)
+
+    config_path = tmp_path / "base.yaml"
+    _write_base_config(config_path, models_dir)
+
+    config = load_config(config_path)
+    settings = create_settings_from_config(config, config_path)
+    output = generate_full_config(settings, config)
+
+    model_id = "gemma-4-31b/it:Q4_K_M"
+    assert model_id in output["models"]
+    assert "--mmproj" in output["models"][model_id]["cmd"]
+    assert str(f32_mmproj_file) in output["models"][model_id]["cmd"]
+    assert str(other_mmproj_file) not in output["models"][model_id]["cmd"]
+
+
+def test_mmproj_does_not_auto_attach_when_preferred_precision_is_ambiguous(tmp_path: Path):
+    models_dir = tmp_path / "models"
+    target_dir = models_dir / "Gemma-4-31B" / "it"
+    target_dir.mkdir(parents=True)
+
+    model_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_gemma-4-31B-it-Q4_K_M.gguf"
+    bf16_mmproj_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_mmproj-BF16.gguf"
+    alt_bf16_mmproj_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_alt-mmproj-BF16.gguf"
+    f16_mmproj_file = target_dir / "unsloth_gemma-4-31B-it-GGUF_mmproj-F16.gguf"
+    _touch(model_file)
+    _touch(bf16_mmproj_file)
+    _touch(alt_bf16_mmproj_file)
+    _touch(f16_mmproj_file)
+
+    config_path = tmp_path / "base.yaml"
+    _write_base_config(config_path, models_dir)
+
+    config = load_config(config_path)
+    settings = create_settings_from_config(config, config_path)
+    output = generate_full_config(settings, config)
+
+    model_id = "gemma-4-31b/it:Q4_K_M"
+    assert model_id in output["models"]
+    assert "--mmproj" not in output["models"][model_id]["cmd"]
+
+
 def test_generation_fails_when_model_is_stored_at_unexpected_depth(tmp_path: Path):
     models_dir = tmp_path / "models"
     unexpected_dir = models_dir

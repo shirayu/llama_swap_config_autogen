@@ -105,6 +105,8 @@ Behavior when `enabled: true`:
 - `--mmproj <path>` is appended to model commands when:
     - an override exists for model ID, display name, or model filename, or
     - `auto_attach: true` and there is exactly one `mmproj` candidate in the same directory as the model file.
+    - `auto_attach: true` and multiple same-directory candidates exist, but exactly one candidate matches the first available precision in this order: `BF16`, `F16`, `F32`.
+- If the preferred available precision has multiple candidates, no candidate is auto-attached; use `overrides` to select one explicitly.
 - If `generate_no_mmproj_variant: true`, an additional model entry without `--mmproj` is generated for each model (and variant)
   that had `mmproj` attached.
 
