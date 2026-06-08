@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from .models import Config, MacroConfig, Settings
+from .models import Config, MacroConfig, ModelPatternConfig, Settings
 
 MACRO_REF_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
@@ -60,14 +60,26 @@ def load_macro_config(config_file: Path) -> MacroConfig:
         normalized_value = normalize_macro_references(value, name_map) if isinstance(value, str) else value
         normalized_macros[normalized_name] = normalized_value
 
-    raw_patterns: dict[str, str] = raw_data.get("model_patterns", {})
+    raw_patterns: dict[str, str | dict] = raw_data.get("model_patterns", {})
     normalized_patterns = {}
-    for pattern, macro_name in raw_patterns.items():
-        normalized_patterns[pattern] = (
+    for pattern, pattern_config in raw_patterns.items():
+        if isinstance(pattern_config, str):
+            macro_name = pattern_config
+            emit_base = True
+        elif isinstance(pattern_config, dict):
+            macro_name = pattern_config.get("macro")
+            if not isinstance(macro_name, str):
+                raise ValueError(f"model_patterns entry '{pattern}' must define a string 'macro'")
+            emit_base = pattern_config.get("emit_base", True)
+        else:
+            raise ValueError(f"model_patterns entry '{pattern}' must be a string or object")
+
+        normalized_macro_name = (
             normalize_macro_references(macro_name, name_map)
             if "${" in macro_name
             else name_map.get(macro_name, normalize_macro_name(macro_name))
         )
+        normalized_patterns[pattern] = ModelPatternConfig(macro=normalized_macro_name, emit_base=emit_base)
 
     raw_variants: list[dict[str, str]] = raw_data.get("variants", [])
     normalized_variants = []

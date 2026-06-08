@@ -11,16 +11,21 @@ Generation flow:
 1. Scan model directories from `models`.
 2. Discover `*.gguf` files.
 3. Build model IDs and model names from the relative directory path and filename quantization suffix.
-4. Select a macro via `model_patterns` (or fallback to `default-params`).
-5. Apply optional `variants`.
-6. Emit only macros actually referenced by generated model commands.
+4. Select a model pattern via `model_patterns` (or fallback to `default-params`).
+5. Emit the base model entry unless the selected pattern sets `emit_base: false`.
+6. Apply optional `variants`.
+7. Emit only macros actually referenced by generated model commands.
 
 ## 2. Top-Level Schema
 
 ```yaml
 models: [<path>, ...]                # required
 macros: { <name>: <string>, ... }    # optional
-model_patterns: { <substring>: <macro>, ... }  # optional
+model_patterns:                         # optional
+  <substring>: <macro>
+  <substring>:
+    macro: <macro name or macro expression>
+    emit_base: <bool>                   # optional, default: true
 variants:                            # optional
   - base_pattern: <substring>
     suffix: <display suffix>
@@ -66,17 +71,20 @@ start_port: <int>                    # optional, default: 9091
 
 ### 3.3 `model_patterns` (optional)
 
-- Type: `map[string, string]`
-- Key: Substring pattern matched against generated display name.
-- Value: Macro name, or macro expression (e.g. `${a} ${b}`).
+- Type: `map[string, string|object]`
+- Key: Substring pattern matched against generated display name, model ID, or filename.
+- Value: Macro name, macro expression (e.g. `${a} ${b}`), or an object with:
+    - `macro`: Macro name or macro expression.
+    - `emit_base`: Whether to emit the unsuffixed base model entry. Defaults to `true`.
 - First matching entry is selected (in file order).
 - Fallback if no match: `default-params`.
+- Use `emit_base: false` when every user-facing entry for the matched model should carry an explicit variant suffix.
 
 ### 3.4 `variants` (optional)
 
 - Type: `list[object]`
 - Required keys per item:
-    - `base_pattern` (substring matched against display name, case-insensitive)
+    - `base_pattern` (substring matched against display name, model ID, or filename; case-insensitive)
     - `suffix` (display name suffix)
     - `macro` (macro name or macro expression)
 - Behavior: Generates extra model entries for matching models.
@@ -173,9 +181,10 @@ quantization suffix for model ID generation.
 1. Define `binary` and `default-params` in `macros`.
 2. Keep macro names stable and kebab-case-like (`a-z`, `0-9`, `_`, `-`).
 3. Build macros hierarchically (`parts` -> `presets`).
-4. Keep `model_patterns` for default assignment only.
-5. Put optional behavior differences in `variants`.
-6. Keep pattern keys specific enough to avoid accidental matches.
+4. Keep `model_patterns` responsible for base selection and whether the unsuffixed base entry is emitted.
+5. Put selectable behavior differences in `variants`.
+6. Use `emit_base: false` when suffix-less names would hide important behavior such as context length or reasoning mode.
+7. Keep pattern keys specific enough to avoid accidental matches.
 
 ## 8. Minimal Example
 
@@ -195,14 +204,21 @@ macros:
   context-default: --ctx-size 32768
   default-params: ${common-base} ${layers-default} ${context-default}
   qwen-cpu: ${default-params} --n-cpu-moe 12 --threads 16 --ctx-size 65536
+  gemma-off: ${default-params} --reasoning off
 
 model_patterns:
   qwen3: default-params
+  gemma-4-:
+    macro: gemma-off
+    emit_base: false
 
 variants:
   - base_pattern: qwen3
     suffix: " (with CPU)"
     macro: qwen-cpu
+  - base_pattern: gemma-4-
+    suffix: " (32k q8 off)"
+    macro: gemma-off
 ```
 
 ## 9. Compatibility Notes

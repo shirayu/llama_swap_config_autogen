@@ -800,3 +800,51 @@ class TestVramEstimationEdgeCases:
         assert "gemma-4-12b:Q4_K_XL--short-ctx" in result["models"]
         assert "gemma-4-12b:Q4_K_M--short-ctx" not in result["models"]
         assert len(result["models"]) == 3
+
+    def test_model_pattern_can_suppress_base_model(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "Gemma-4-12B"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "gemma-4-12B-it-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00")
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "macros": {
+                    "binary": "/app/llama-server",
+                    "default-params": "--ctx-size 32768",
+                    "gemma-4-base": "--ctx-size 32768",
+                    "gemma-4-long": "--ctx-size 49152",
+                },
+                "model_patterns": {
+                    "gemma-4-": {
+                        "macro": "gemma-4-base",
+                        "emit_base": False,
+                    }
+                },
+                "variants": [
+                    {
+                        "base_pattern": "gemma-4-",
+                        "suffix": " (32k)",
+                        "macro": "gemma-4-base",
+                    },
+                    {
+                        "base_pattern": "gemma-4-",
+                        "suffix": " (48k)",
+                        "macro": "gemma-4-long",
+                    },
+                ],
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        assert "gemma-4-12b:Q4_K_M" not in result["models"]
+        assert "gemma-4-12b:Q4_K_M--32k" in result["models"]
+        assert "gemma-4-12b:Q4_K_M--48k" in result["models"]

@@ -89,6 +89,10 @@ model_patterns:
   # General-purpose large models
   "qwen3-30b/instruct-2507": "qwen-context-large-params"
   "gemma-3-27b": "gemma-large-params"
+  # Use object form when suffix-less base names should be hidden.
+  # "gemma-4-":
+  #   macro: "default-params"
+  #   emit_base: false
 
   # Coding-focused models
   "qwen3-30b/coder-instruct": "qwen-coder-params"

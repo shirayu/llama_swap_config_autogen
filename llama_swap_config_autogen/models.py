@@ -19,7 +19,7 @@ class MmprojConfig(BaseModel):
 class Config(BaseModel):
     models: list[Path] = Field(description="List of model directory paths")
     macros: dict[str, str] = Field(default_factory=dict)
-    model_patterns: dict[str, str] = Field(default_factory=dict)
+    model_patterns: dict[str, Any] = Field(default_factory=dict)
     variants: list[dict[str, Any]] = Field(default_factory=list)
     mmproj: MmprojConfig = Field(default_factory=MmprojConfig)
     default_ttl: int = Field(default=300)
@@ -29,9 +29,14 @@ class Config(BaseModel):
     vram_estimation: bool = Field(default=False)
 
 
+class ModelPatternConfig(BaseModel):
+    macro: str
+    emit_base: bool = Field(default=True)
+
+
 class MacroConfig(BaseModel):
     macros: dict[str, str] = Field(default_factory=dict)
-    model_patterns: dict[str, str] = Field(default_factory=dict)
+    model_patterns: dict[str, ModelPatternConfig] = Field(default_factory=dict)
     variants: list[dict[str, Any]] = Field(default_factory=list)
 
 

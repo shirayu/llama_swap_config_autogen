@@ -148,6 +148,9 @@ model_patterns:
   qwen3: default-params
 ```
 
+`model_patterns` also supports object values with `emit_base: false` when a model should only be emitted through
+explicitly named variants. See [`spec.md`](./spec.md) for details.
+
 To enable VRAM estimation:
 
 ```yaml

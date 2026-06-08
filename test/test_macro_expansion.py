@@ -248,7 +248,33 @@ class TestMacroNameNormalization:
             macro_config = load_macro_config(temp_path)
             assert "glm-4-7-params" in macro_config.macros
             assert macro_config.macros["glm-wrapper"] == "${glm-4-7-params} --repeat-penalty 1.0"
-            assert macro_config.model_patterns["glm-4.7-flash"] == "glm-4-7-params"
+            assert macro_config.model_patterns["glm-4.7-flash"].macro == "glm-4-7-params"
+            assert macro_config.model_patterns["glm-4.7-flash"].emit_base is True
             assert macro_config.variants[0]["macro"] == "${glm-4-7-params} --reasoning off"
+        finally:
+            temp_path.unlink()
+
+    def test_model_pattern_object_config_is_normalized(self):
+        config_data = {
+            "models": ["/tmp/models"],
+            "macros": {
+                "gemma.4.params": "--ctx-size 32768",
+            },
+            "model_patterns": {
+                "gemma-4-": {
+                    "macro": "gemma.4.params",
+                    "emit_base": False,
+                }
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.safe_dump(config_data, f)
+            temp_path = Path(f.name)
+
+        try:
+            macro_config = load_macro_config(temp_path)
+            assert macro_config.model_patterns["gemma-4-"].macro == "gemma-4-params"
+            assert macro_config.model_patterns["gemma-4-"].emit_base is False
         finally:
             temp_path.unlink()

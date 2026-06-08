@@ -35,6 +35,7 @@ macros:
   # Shared parts: context
   context-short: --ctx-size 4096
   context-medium: --ctx-size 32768
+  context-48k: --ctx-size 49152
   context-large: --ctx-size 65536
   context-ultra: --ctx-size 131072
   context-full: -c 0
@@ -67,6 +68,9 @@ macros:
   # Presets
   deepseek-r1-params: ${reasoning-base} ${temp-reasoning}
   gemma-large-params: ${default-params} ${layers-medium} ${context-medium}
+  gemma-4-32k-q8-on-params: ${common-base} ${layers-full} ${context-medium}
+  gemma-4-32k-q8-off-params: ${gemma-4-32k-q8-on-params} --reasoning off
+  gemma-4-48k-kv-q4-off-params: ${common-base} ${layers-full} ${context-48k} --cache-type-k q4_0 --cache-type-v q4_0 --reasoning off
   glm-47-params: ${default-params} --repeat-penalty 1.0 --temp 1.0
   gpt-oss-20b-params: ${reasoning-base} -c 0 -fa
   gpt-oss-120b-params: ${reasoning-base} ${layers-mini} --ctx-size 16384 --no-mmap
@@ -91,6 +95,9 @@ model_patterns:
   StarCoder: qwen-coder-params
   TinyLlama: memory-constrained-params
   gemma-3-27b: gemma-large-params
+  gemma-4-:
+    macro: gemma-4-32k-q8-off-params
+    emit_base: false
   glm-4.7/flash: glm-47-params
   gpt-oss-120b: gpt-oss-120b-params
   gpt-oss-20b: gpt-oss-20b-params
@@ -103,8 +110,14 @@ variants:
     suffix: ' (short ctx)'
     macro: short-ctx-params
   - base_pattern: gemma-4-
-    suffix: ' (thinking off)'
-    macro: thinking-off-params
+    suffix: ' (32k q8 off)'
+    macro: gemma-4-32k-q8-off-params
+  - base_pattern: gemma-4-
+    suffix: ' (48k q4 off)'
+    macro: gemma-4-48k-kv-q4-off-params
+  - base_pattern: gemma-4-
+    suffix: ' (32k q8 on)'
+    macro: gemma-4-32k-q8-on-params
   - base_pattern: glm-4.7/flash
     suffix: ' (thinking off)'
     macro: glm-47-thinking-off-params

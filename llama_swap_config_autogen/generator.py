@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .config import load_macro_config
 from .gguf_metadata import GGUFMetadataCache, estimate_vram_gb, get_gguf_metadata
-from .models import Config, MacroConfig, MultilineLiteral, Settings, YamlModelConfig
+from .models import Config, MacroConfig, ModelPatternConfig, MultilineLiteral, Settings, YamlModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -106,14 +106,19 @@ def matches_model_pattern(pattern: str, *model_identifiers: str) -> bool:
     return any(normalized_pattern in identifier.lower() for identifier in model_identifiers)
 
 
+def get_model_pattern_config(model_name: str, macro_config: MacroConfig, *model_identifiers: str) -> ModelPatternConfig:
+    """Get appropriate model pattern configuration based on model identifiers."""
+    match_targets = (*model_identifiers, model_name)
+    for pattern, pattern_config in macro_config.model_patterns.items():
+        if matches_model_pattern(pattern, *match_targets):
+            return pattern_config
+
+    return ModelPatternConfig(macro="default-params")
+
+
 def get_model_macro(model_name: str, macro_config: MacroConfig, *model_identifiers: str) -> str:
     """Get appropriate macro based on model identifiers."""
-    match_targets = (*model_identifiers, model_name)
-    for pattern, macro_name in macro_config.model_patterns.items():
-        if matches_model_pattern(pattern, *match_targets):
-            return macro_name
-
-    return "default-params"
+    return get_model_pattern_config(model_name, macro_config, *model_identifiers).macro
 
 
 def is_mmproj_file(path_model: Path) -> bool:
@@ -379,7 +384,8 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 continue
             ids.add(model_id)
 
-            macro_name = get_model_macro(display_name, macro_config, model_id, path_model.name)
+            pattern_config = get_model_pattern_config(display_name, macro_config, model_id, path_model.name)
+            macro_name = pattern_config.macro
             selected_mmproj_path = select_mmproj_path_for_model(
                 model_path=path_model,
                 model_id=model_id,
@@ -389,49 +395,50 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 auto_attach=mmproj_config.auto_attach,
             )
 
-            cmd = format_command_with_macro(
-                str(path_model),
-                macro_name,
-                mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
-                mmproj_arg=mmproj_config.arg,
-            )
-
-            # Expand macro to resolve -ngl and -c values for VRAM estimation
-            vram_label = None
-            if metadata_cache is not None:
-                expanded_cmd = expand_macro_expression(macro_name, macro_config.macros)
-                before_count = len(metadata_cache.entries)
-                vram_label = build_vram_label(
-                    path_model,
-                    expanded_cmd,
-                    0,
-                    metadata_cache,
-                    mmproj_path=selected_mmproj_path,
+            if pattern_config.emit_base:
+                cmd = format_command_with_macro(
+                    str(path_model),
+                    macro_name,
+                    mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
+                    mmproj_arg=mmproj_config.arg,
                 )
-                if len(metadata_cache.entries) != before_count:
-                    cache_dirty = True
-            full_name = f"{model_name} {vram_label}" if vram_label else model_name
 
-            ensure_unique_model_name(full_name, model_id, name_to_id)
-            models[model_id] = YamlModelConfig(ttl=settings.default_ttl, cmd=cmd, name=full_name)
-            if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
-                no_mmproj_id = f"{model_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
-                no_mmproj_cmd = format_command_with_macro(str(path_model), macro_name)
-                no_mmproj_vram_label = None
+                # Expand macro to resolve -ngl and -c values for VRAM estimation
+                vram_label = None
                 if metadata_cache is not None:
                     expanded_cmd = expand_macro_expression(macro_name, macro_config.macros)
                     before_count = len(metadata_cache.entries)
-                    no_mmproj_vram_label = build_vram_label(path_model, expanded_cmd, 0, metadata_cache)
+                    vram_label = build_vram_label(
+                        path_model,
+                        expanded_cmd,
+                        0,
+                        metadata_cache,
+                        mmproj_path=selected_mmproj_path,
+                    )
                     if len(metadata_cache.entries) != before_count:
                         cache_dirty = True
-                no_mmproj_base_name = f"{model_name} {no_mmproj_vram_label}" if no_mmproj_vram_label else model_name
-                no_mmproj_name = f"{no_mmproj_base_name}{mmproj_config.no_mmproj_suffix}"
-                ensure_unique_model_name(no_mmproj_name, no_mmproj_id, name_to_id)
-                models[no_mmproj_id] = YamlModelConfig(
-                    ttl=settings.default_ttl,
-                    cmd=no_mmproj_cmd,
-                    name=no_mmproj_name,
-                )
+                full_name = f"{model_name} {vram_label}" if vram_label else model_name
+
+                ensure_unique_model_name(full_name, model_id, name_to_id)
+                models[model_id] = YamlModelConfig(ttl=settings.default_ttl, cmd=cmd, name=full_name)
+                if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
+                    no_mmproj_id = f"{model_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
+                    no_mmproj_cmd = format_command_with_macro(str(path_model), macro_name)
+                    no_mmproj_vram_label = None
+                    if metadata_cache is not None:
+                        expanded_cmd = expand_macro_expression(macro_name, macro_config.macros)
+                        before_count = len(metadata_cache.entries)
+                        no_mmproj_vram_label = build_vram_label(path_model, expanded_cmd, 0, metadata_cache)
+                        if len(metadata_cache.entries) != before_count:
+                            cache_dirty = True
+                    no_mmproj_base_name = f"{model_name} {no_mmproj_vram_label}" if no_mmproj_vram_label else model_name
+                    no_mmproj_name = f"{no_mmproj_base_name}{mmproj_config.no_mmproj_suffix}"
+                    ensure_unique_model_name(no_mmproj_name, no_mmproj_id, name_to_id)
+                    models[no_mmproj_id] = YamlModelConfig(
+                        ttl=settings.default_ttl,
+                        cmd=no_mmproj_cmd,
+                        name=no_mmproj_name,
+                    )
 
             # Generate variant models
             for variant in macro_config.variants:
@@ -447,7 +454,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     # Generate variant_id in YAML key suitable format from model_id
                     cleaned_suffix = format_suffix_for_id(suffix)
                     variant_id = f"{model_id}-{cleaned_suffix}"
-                    variant_display_name = f"{full_name}{suffix}"
+                    variant_display_name = f"{model_name}{suffix}"
                     if variant_id not in models:  # Avoid duplicates
                         variant_cmd = format_command_with_macro(
                             str(path_model),
