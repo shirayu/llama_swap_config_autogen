@@ -35,7 +35,6 @@ macros:
   # Shared parts: context
   context-short: --ctx-size 4096
   context-medium: --ctx-size 32768
-  context-48k: --ctx-size 49152
   context-large: --ctx-size 65536
   context-ultra: --ctx-size 131072
   context-full: -c 0
@@ -70,7 +69,8 @@ macros:
   gemma-large-params: ${default-params} ${layers-medium} ${context-medium}
   gemma-4-32k-q8-on-params: ${common-base} ${layers-full} ${context-medium}
   gemma-4-32k-q8-off-params: ${gemma-4-32k-q8-on-params} --reasoning off
-  gemma-4-48k-kv-q4-off-params: ${common-base} ${layers-full} ${context-48k} --cache-type-k q4_0 --cache-type-v q4_0 --reasoning off
+  gemma-4-64k-kv-q4-off-params: ${common-base} ${layers-full} ${context-large} --cache-type-k q4_0 --cache-type-v q4_0 --reasoning off
+  gemma-4-128k-kv-q4-off-params: ${common-base} ${layers-full} ${context-ultra} --cache-type-k q4_0 --cache-type-v q4_0 --reasoning off
   glm-47-params: ${default-params} --repeat-penalty 1.0 --temp 1.0
   gpt-oss-20b-params: ${reasoning-base} -c 0 -fa
   gpt-oss-120b-params: ${reasoning-base} ${layers-mini} --ctx-size 16384 --no-mmap
@@ -113,8 +113,11 @@ variants:
     suffix: ' (32k q8 off)'
     macro: gemma-4-32k-q8-off-params
   - base_pattern: gemma-4-
-    suffix: ' (48k q4 off)'
-    macro: gemma-4-48k-kv-q4-off-params
+    suffix: ' (64k q4 off)'
+    macro: gemma-4-64k-kv-q4-off-params
+  - base_pattern: gemma-4-
+    suffix: ' (128k q4 off limit)'
+    macro: gemma-4-128k-kv-q4-off-params
   - base_pattern: gemma-4-
     suffix: ' (32k q8 on)'
     macro: gemma-4-32k-q8-on-params
