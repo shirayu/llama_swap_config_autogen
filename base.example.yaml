@@ -19,7 +19,7 @@ mmproj:
   enabled: true
   auto_attach: true
   arg: --mmproj
-  generate_no_mmproj_variant: true
+  generate_no_mmproj_variant: false
   no_mmproj_suffix: ' (no mmproj)'
   overrides: {}
 

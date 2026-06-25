@@ -132,7 +132,7 @@ Notes:
 
 `base.yaml` defines model directories, macro templates, pattern-based macro selection, and optional variants.
 For the full input format and behavior details, see [`spec.md`](./spec.md).
-`mmproj` behavior (auto attach, overrides, and optional "no mmproj" variants) is also controlled in `base.yaml`.
+`mmproj` behavior (auto attach, overrides, and optional opt-in "no mmproj" variants) is also controlled in `base.yaml`.
 
 Minimal example:
 

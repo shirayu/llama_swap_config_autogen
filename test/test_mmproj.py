@@ -33,7 +33,7 @@ def _write_base_config(
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
 
-def test_mmproj_auto_attach_and_skip_as_standalone_model(tmp_path: Path):
+def test_mmproj_auto_attach_and_skip_as_standalone_model_without_no_mmproj_by_default(tmp_path: Path):
     models_dir = tmp_path / "models"
     target_dir = models_dir / "Qwen3.5-35B" / "standard"
     target_dir.mkdir(parents=True)
@@ -57,8 +57,7 @@ def test_mmproj_auto_attach_and_skip_as_standalone_model(tmp_path: Path):
     assert output["models"][model_id]["name"] == "qwen3.5-35b/standard:Q4_K_M"
     assert all(":F16" not in key for key in output["models"].keys())
     no_mmproj_entries = [k for k, v in output["models"].items() if v["name"].endswith("(no mmproj)")]
-    assert len(no_mmproj_entries) == 1
-    assert "--mmproj" not in output["models"][no_mmproj_entries[0]]["cmd"]
+    assert no_mmproj_entries == []
 
 
 def test_mmproj_override_applies_when_auto_attach_is_disabled(tmp_path: Path):

@@ -34,7 +34,7 @@ mmproj:                              # optional
   enabled: <bool>                    # default: true
   auto_attach: <bool>                # default: true
   arg: <string>                      # default: --mmproj
-  generate_no_mmproj_variant: <bool> # default: true
+  generate_no_mmproj_variant: <bool> # default: false
   no_mmproj_suffix: <string>         # default: " (no mmproj)"
   overrides: { <model-id|display-name|filename>: <path>, ... }
 
@@ -103,7 +103,7 @@ start_port: <int>                    # optional, default: 9091
     - `enabled` (`bool`, default `true`)
     - `auto_attach` (`bool`, default `true`)
     - `arg` (`string`, default `--mmproj`)
-    - `generate_no_mmproj_variant` (`bool`, default `true`)
+    - `generate_no_mmproj_variant` (`bool`, default `false`)
     - `no_mmproj_suffix` (`string`, default `" (no mmproj)"`)
     - `overrides` (`map[string, path]`, default `{}`)
 
