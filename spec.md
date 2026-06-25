@@ -37,6 +37,12 @@ mmproj:                              # optional
   generate_no_mmproj_variant: <bool> # default: false
   no_mmproj_suffix: <string>         # default: " (no mmproj)"
   overrides: { <model-id|display-name|filename>: <path>, ... }
+model_labels:                        # optional
+  mmproj_default: <string>            # default: " 🌐"
+  rules:
+    - pattern: <substring>
+      label: <string>
+      requires_mmproj: <bool>         # optional, default: false
 
 default_ttl: <int>                   # optional, default: 300
 health_check_timeout: <int>          # optional, default: 240
@@ -121,6 +127,25 @@ Behavior when `enabled: true`:
 Behavior when `enabled: false`:
 
 - Legacy behavior is kept: `mmproj` files are treated like normal `.gguf` model files.
+
+### 3.7 `model_labels` (optional)
+
+- Type: `object`
+- Fields:
+    - `mmproj_default` (`string`, default `" 🌐"`)
+    - `rules` (`list`, default `[]`)
+
+Rule fields:
+
+- `pattern` (`string`, required): matched as a case-insensitive substring against model ID, display name, or filename.
+- `label` (`string`, required): appended to the generated model `name`.
+- `requires_mmproj` (`bool`, default `false`): when `true`, the rule only applies if `--mmproj` was attached.
+
+Behavior:
+
+- Models with an attached `mmproj` get `mmproj_default` appended to their display `name`.
+- Matching rules override the current label.
+- Rules can also label non-`mmproj` models, such as audio or TTS models, when `requires_mmproj` is omitted or `false`.
 
 ## 4. Macro Resolution Rules
 

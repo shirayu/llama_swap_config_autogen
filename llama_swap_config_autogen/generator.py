@@ -6,7 +6,15 @@ from pathlib import Path
 
 from .config import load_macro_config
 from .gguf_metadata import GGUFMetadataCache, estimate_vram_gb, get_gguf_metadata
-from .models import Config, MacroConfig, ModelPatternConfig, MultilineLiteral, Settings, YamlModelConfig
+from .models import (
+    Config,
+    MacroConfig,
+    ModelLabelsConfig,
+    ModelPatternConfig,
+    MultilineLiteral,
+    Settings,
+    YamlModelConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +127,27 @@ def get_model_pattern_config(model_name: str, macro_config: MacroConfig, *model_
 def get_model_macro(model_name: str, macro_config: MacroConfig, *model_identifiers: str) -> str:
     """Get appropriate macro based on model identifiers."""
     return get_model_pattern_config(model_name, macro_config, *model_identifiers).macro
+
+
+def select_model_label(
+    model_labels: ModelLabelsConfig,
+    model_id: str,
+    display_name: str,
+    filename: str,
+    has_mmproj: bool,
+) -> str:
+    label = model_labels.mmproj_default if has_mmproj else ""
+    for rule in model_labels.rules:
+        if rule.requires_mmproj and not has_mmproj:
+            continue
+        if matches_model_pattern(rule.pattern, model_id, display_name, filename):
+            label = rule.label
+    return label
+
+
+def format_model_name(base_name: str, vram_label: str | None = None, label: str = "") -> str:
+    vram_part = f" {vram_label}" if vram_label else ""
+    return f"{base_name}{vram_part}{label}"
 
 
 def is_mmproj_file(path_model: Path) -> bool:
@@ -394,6 +423,13 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 mmproj_by_prefix=mmproj_by_prefix,
                 auto_attach=mmproj_config.auto_attach,
             )
+            model_label = select_model_label(
+                config.model_labels,
+                model_id=model_id,
+                display_name=display_name,
+                filename=path_model.name,
+                has_mmproj=selected_mmproj_path is not None,
+            )
 
             if pattern_config.emit_base:
                 cmd = format_command_with_macro(
@@ -417,7 +453,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     )
                     if len(metadata_cache.entries) != before_count:
                         cache_dirty = True
-                full_name = f"{model_name} {vram_label}" if vram_label else model_name
+                full_name = format_model_name(model_name, vram_label, model_label)
 
                 ensure_unique_model_name(full_name, model_id, name_to_id)
                 models[model_id] = YamlModelConfig(ttl=settings.default_ttl, cmd=cmd, name=full_name)
@@ -431,7 +467,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         no_mmproj_vram_label = build_vram_label(path_model, expanded_cmd, 0, metadata_cache)
                         if len(metadata_cache.entries) != before_count:
                             cache_dirty = True
-                    no_mmproj_base_name = f"{model_name} {no_mmproj_vram_label}" if no_mmproj_vram_label else model_name
+                    no_mmproj_base_name = format_model_name(model_name, no_mmproj_vram_label)
                     no_mmproj_name = f"{no_mmproj_base_name}{mmproj_config.no_mmproj_suffix}"
                     ensure_unique_model_name(no_mmproj_name, no_mmproj_id, name_to_id)
                     models[no_mmproj_id] = YamlModelConfig(
@@ -476,9 +512,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             )
                             if len(metadata_cache.entries) != before_count:
                                 cache_dirty = True
-                        variant_full_name = (
-                            f"{model_name}{suffix} {variant_vram_label}" if variant_vram_label else variant_display_name
-                        )
+                        variant_full_name = format_model_name(variant_display_name, variant_vram_label, model_label)
                         ensure_unique_model_name(variant_full_name, variant_id, name_to_id)
                         models[variant_id] = YamlModelConfig(
                             ttl=settings.default_ttl, cmd=variant_cmd, name=variant_full_name
@@ -500,7 +534,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 if len(metadata_cache.entries) != before_count:
                                     cache_dirty = True
                             if no_mmproj_variant_vram_label:
-                                base_variant_name = f"{model_name}{suffix} {no_mmproj_variant_vram_label}"
+                                base_variant_name = format_model_name(
+                                    variant_display_name, no_mmproj_variant_vram_label
+                                )
                             else:
                                 base_variant_name = variant_display_name
                             no_mmproj_variant_name = f"{base_variant_name}{mmproj_config.no_mmproj_suffix}"

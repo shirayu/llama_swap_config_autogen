@@ -16,12 +16,24 @@ class MmprojConfig(BaseModel):
     no_mmproj_suffix: str = Field(default=" (no mmproj)")
 
 
+class ModelLabelRule(BaseModel):
+    pattern: str
+    label: str
+    requires_mmproj: bool = Field(default=False)
+
+
+class ModelLabelsConfig(BaseModel):
+    mmproj_default: str = Field(default=" 🌐")
+    rules: list[ModelLabelRule] = Field(default_factory=list)
+
+
 class Config(BaseModel):
     models: list[Path] = Field(description="List of model directory paths")
     macros: dict[str, str] = Field(default_factory=dict)
     model_patterns: dict[str, Any] = Field(default_factory=dict)
     variants: list[dict[str, Any]] = Field(default_factory=list)
     mmproj: MmprojConfig = Field(default_factory=MmprojConfig)
+    model_labels: ModelLabelsConfig = Field(default_factory=ModelLabelsConfig)
     default_ttl: int = Field(default=300)
     health_check_timeout: int = Field(default=240)
     log_level: str = Field(default="info")

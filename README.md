@@ -133,6 +133,8 @@ Notes:
 `base.yaml` defines model directories, macro templates, pattern-based macro selection, and optional variants.
 For the full input format and behavior details, see [`spec.md`](./spec.md).
 `mmproj` behavior (auto attach, overrides, and optional opt-in "no mmproj" variants) is also controlled in `base.yaml`.
+Models with attached `mmproj` files are labeled as multimodal by default, and `model_labels` can override or add labels such as
+vision, audio, or TTS markers.
 
 Minimal example:
 
