@@ -12,9 +12,20 @@ start_port: 9091
 vram_estimation: true
 captureBuffer: 0
 
-max_concurrent_models: 3
-preload_popular_models: true
-cleanup_interval: 60
+# llama-swap official routing / groups (optional)
+# groups:
+#   default-group:
+#     swap: true
+#     exclusive: true
+#     members:
+#       - "deepseek-r1-distill-qwen-32b/distill:Q4_K_M"
+#       - "glm-4.7/flash:Q4_K_M"
+
+# llama-swap hooks (optional)
+# hooks:
+#   on_startup:
+#     preload:
+#       - "deepseek-r1-distill-qwen-32b/distill:Q4_K_M"
 
 mmproj:
   enabled: true

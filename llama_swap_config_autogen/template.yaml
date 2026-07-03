@@ -16,10 +16,21 @@ health_check_timeout: 240     # Health check timeout (seconds)
 log_level: warn               # Log level (debug, info, warn, error)
 start_port: 9091              # Starting port number
 
-# Advanced settings (optional)
-max_concurrent_models: 3      # Number of models that can run simultaneously
-preload_popular_models: true  # Preload popular models
-cleanup_interval: 60          # Cleanup interval (seconds)
+# llama-swap official routing / groups (optional)
+# Controls model swapping behavior using official groups or matrix configs.
+# groups:
+#   default-group:
+#     swap: true
+#     exclusive: true
+#     members:
+#       - "your-model-id-1"
+#       - "your-model-id-2"
+
+# llama-swap hooks (optional)
+# hooks:
+#   on_startup:
+#     preload:
+#       - "your-model-id-1"
 
 # macros: Reusable command templates
 macros:
