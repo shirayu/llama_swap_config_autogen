@@ -21,12 +21,18 @@ Generation flow:
 ```yaml
 models: [<path>, ...]                # required
 macros: { <name>: <string>, ... }    # optional
+variant_presets:                      # optional
+  <preset_name>:
+    - suffix: <display suffix>
+      macro: <macro name or template expression>
 model_patterns:                         # optional
   <substring>: <macro>
   <substring>:
     macro: <macro name or macro expression>
     emit_base: <bool>                   # optional, default: true
-variants:                            # optional
+    variants: [<preset_name>, ...]      # optional
+    <custom-macro-argument>: <value>    # optional
+variants:                            # optional (legacy)
   - base_pattern: <substring>
     suffix: <display suffix>
     macro: <macro name or macro expression>
@@ -45,9 +51,9 @@ model_labels:                        # optional
       requires_mmproj: <bool>         # optional, default: false
 
 default_ttl: <int>                   # optional, default: 300
-health_check_timeout: <int>          # optional, default: 240
-log_level: <string>                  # optional, default: info
-start_port: <int>                    # optional, default: 9091
+healthCheckTimeout: <int>            # optional, default: 240
+logLevel: <string>                   # optional, default: info
+startPort: <int>                     # optional, default: 9091
 ```
 
 ## 3. Field Definitions
@@ -232,18 +238,22 @@ macros:
   gemma-off: ${default-params} --reasoning off
 
 model_patterns:
-  qwen3: default-params
+  qwen3:
+    macro: default-params
+    cpu-params: qwen-cpu
+    variants: [cpu]
   gemma-4-:
     macro: gemma-off
     emit_base: false
+    variants: [gemma-4-variants]
 
-variants:
-  - base_pattern: qwen3
-    suffix: " (with CPU)"
-    macro: qwen-cpu
-  - base_pattern: gemma-4-
-    suffix: " (32k q8 off)"
-    macro: gemma-off
+variant_presets:
+  cpu:
+    - suffix: " (with CPU)"
+      macro: ${cpu-params}
+  gemma-4-variants:
+    - suffix: " (32k q8 off)"
+      macro: gemma-off
 ```
 
 ## 9. Compatibility Notes

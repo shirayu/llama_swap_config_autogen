@@ -278,3 +278,67 @@ class TestMacroNameNormalization:
             assert macro_config.model_patterns["gemma-4-"].emit_base is False
         finally:
             temp_path.unlink()
+
+
+class TestVariantPresets:
+    """Test variant presets and template argument binding functionality"""
+
+    def test_variant_presets_normalization(self):
+        """Test loading variant presets and macro normalization"""
+        config_data = {
+            "models": ["/tmp/models"],
+            "macros": {
+                "qwen.cpu-params": "--threads 16",
+            },
+            "variant_presets": {
+                "cpu.variant": [
+                    {
+                        "suffix": " (with CPU)",
+                        "macro": "${cpu.macro}",
+                    }
+                ]
+            },
+            "model_patterns": {
+                "qwen3": {
+                    "macro": "default-params",
+                    "cpu.macro": "qwen.cpu-params",
+                    "variants": ["cpu.variant"],
+                }
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.safe_dump(config_data, f)
+            temp_path = Path(f.name)
+
+        try:
+            macro_config = load_macro_config(temp_path)
+            # variant_presets keys and inner macro references should be normalized
+            assert "cpu-variant" in macro_config.variant_presets
+            preset_items = macro_config.variant_presets["cpu-variant"]
+            assert len(preset_items) == 1
+            assert preset_items[0].suffix == " (with CPU)"
+            assert preset_items[0].macro == "${cpu-macro}"
+
+            # model_pattern's variants list should be normalized
+            pattern_config = macro_config.model_patterns["qwen3"]
+            assert pattern_config.variants == ["cpu-variant"]
+
+            # custom extra fields (arguments) should be preserved in model_extra
+            assert pattern_config.model_extra is not None
+            assert pattern_config.model_extra["cpu-macro"] == "qwen-cpu-params"
+        finally:
+            temp_path.unlink()
+
+    def test_resolve_variant_macro_template(self):
+        """Test resolving templates like ${cpu-macro} with custom pattern config arguments"""
+        from llama_swap_config_autogen.generator import resolve_variant_macro_template
+        from llama_swap_config_autogen.models import ModelPatternConfig
+
+        pattern_config = ModelPatternConfig.model_validate({"macro": "default-params", "cpu-macro": "qwen-cpu-params"})
+
+        template = "some prefix ${cpu-macro} and global ${global-macro}"
+        resolved = resolve_variant_macro_template(template, pattern_config)
+
+        # cpu-macro should be resolved, global-macro should be kept as-is
+        assert resolved == "some prefix qwen-cpu-params and global ${global-macro}"

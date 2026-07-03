@@ -125,70 +125,90 @@ macros:
   glm-47-thinking-off-params: ${glm-47-params} --reasoning off
 
 model_patterns:
-  r1-distill-qwen-32b: deepseek-r1-params
-  Phi-3: memory-constrained-params
-  qwen3-30b/instruct-2507: qwen-context-large-params
-  qwen3-30b/coder-instruct: qwen-coder-params
-  qwen3-next-80b: qwen-context-large-params
-  StarCoder: qwen-coder-params
-  TinyLlama: memory-constrained-params
-  gemma-3-27b: gemma-large-params
-  gemma-4-:
-    macro: gemma-4-32k-q8-off-params
-    emit_base: false
-  glm-4.7/flash: glm-47-params
+  # Reasoning-focused models
+  r1-distill-qwen-32b:
+    macro: deepseek-r1-params
+    fast-params: ${deepseek-r1-params} ${inference-fast}
+    variants: [fast, short-ctx]
+
   gpt-oss-120b: gpt-oss-120b-params
   gpt-oss-20b: gpt-oss-20b-params
 
-variants:
-  - base_pattern: gemma-3-27b
-    suffix: ' (Memory Efficient)'
-    macro: memory-constrained-params
-  - base_pattern: gemma-3-27b/it-qat
-    suffix: ' (short ctx)'
-    macro: short-ctx-params
-  - base_pattern: gemma-4-
-    suffix: ' (32k q8 off)'
+  # General-purpose large models
+  qwen3-30b/instruct-2507:
+    macro: qwen-context-large-params
+    cpu-params: qwen-cpu-params
+    variants: [cpu, short-ctx]
+
+  gemma-3-27b:
+    macro: gemma-large-params
+    variants: [memory-efficient]
+
+  gemma-3-27b/it-qat:
+    macro: gemma-large-params
+    variants: [memory-efficient, short-ctx]
+
+  gemma-4-:
     macro: gemma-4-32k-q8-off-params
-  - base_pattern: gemma-4-
-    suffix: ' (64k q4 off)'
-    macro: gemma-4-64k-kv-q4-off-params
-  - base_pattern: gemma-4-
-    suffix: ' (128k q4 off limit)'
-    macro: gemma-4-128k-kv-q4-off-params
-  - base_pattern: gemma-4-
-    suffix: ' (32k q8 on)'
-    macro: gemma-4-32k-q8-on-params
-  - base_pattern: glm-4.7/flash
-    suffix: ' (thinking off)'
-    macro: glm-47-thinking-off-params
-  - base_pattern: r1-distill
-    suffix: ' (Fast)'
-    macro: ${deepseek-r1-params} ${inference-fast}
-  - base_pattern: r1-distill-qwen-32b
-    suffix: ' (short ctx)'
-    macro: short-ctx-params
-  - base_pattern: qwen3-30b/instruct-2507
-    suffix: ' (with CPU)'
-    macro: qwen-cpu-params
-  - base_pattern: qwen3-30b/instruct-2507
-    suffix: ' (short ctx)'
-    macro: short-ctx-params
-  - base_pattern: qwen3-next-80b
-    suffix: ' (with CPU)'
-    macro: qwen-cpu-params-big
-  - base_pattern: qwen3-next-80b
-    suffix: ' (thinking off)'
-    macro: thinking-off-params
-  - base_pattern: qwen3.5-35b
-    suffix: ' (with CPU)'
-    macro: qwen-cpu-params
-  - base_pattern: qwen3.5-35b
-    suffix: ' (short ctx)'
-    macro: short-ctx-params
-  - base_pattern: qwen3.5-35b
-    suffix: ' (thinking off)'
-    macro: thinking-off-params
-  - base_pattern: swallow-70b/instruct
-    suffix: ' (short ctx)'
-    macro: short-ctx-params
+    emit_base: false
+    variants: [gemma-4-variants]
+
+  glm-4.7/flash:
+    macro: glm-47-params
+    thinking-off-params: glm-47-thinking-off-params
+    variants: [thinking-off]
+
+  qwen3-next-80b:
+    macro: qwen-context-large-params
+    cpu-params: qwen-cpu-params-big
+    thinking-off-params: thinking-off-params
+    variants: [cpu, thinking-off]
+
+  qwen3.5-35b:
+    macro: default-params
+    cpu-params: qwen-cpu-params
+    thinking-off-params: thinking-off-params
+    variants: [cpu, short-ctx, thinking-off]
+
+  swallow-70b/instruct:
+    macro: default-params
+    variants: [short-ctx]
+
+  # Coding-focused models
+  qwen3-30b/coder-instruct: qwen-coder-params
+  StarCoder: qwen-coder-params
+
+  # Lightweight models (for memory-constrained environments)
+  Phi-3: memory-constrained-params
+  TinyLlama: memory-constrained-params
+
+variant_presets:
+  cpu:
+    - suffix: ' (with CPU)'
+      macro: ${cpu-params}
+
+  short-ctx:
+    - suffix: ' (short ctx)'
+      macro: short-ctx-params
+
+  memory-efficient:
+    - suffix: ' (Memory Efficient)'
+      macro: memory-constrained-params
+
+  fast:
+    - suffix: ' (Fast)'
+      macro: ${fast-params}
+
+  thinking-off:
+    - suffix: ' (thinking off)'
+      macro: ${thinking-off-params}
+
+  gemma-4-variants:
+    - suffix: ' (32k q8 off)'
+      macro: gemma-4-32k-q8-off-params
+    - suffix: ' (64k q4 off)'
+      macro: gemma-4-64k-kv-q4-off-params
+    - suffix: ' (128k q4 off limit)'
+      macro: gemma-4-128k-kv-q4-off-params
+    - suffix: ' (32k q8 on)'
+      macro: gemma-4-32k-q8-on-params

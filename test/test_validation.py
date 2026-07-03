@@ -260,7 +260,10 @@ macros:
 """
         result = validate_yaml_string(yaml_content)
         assert not result.is_valid
-        assert any("reserved" in error.lower() or "port" in error.lower() or "macros" in error.lower() for error in result.errors)
+        assert any(
+            "reserved" in error.lower() or "port" in error.lower() or "macros" in error.lower()
+            for error in result.errors
+        )
 
     def test_group_references_unknown_model(self):
         yaml_content = """

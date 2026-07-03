@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from .models import Config, MacroConfig, ModelPatternConfig, Settings
+from .models import Config, MacroConfig, ModelPatternConfig, Settings, VariantPresetItem
 
 MACRO_REF_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
@@ -66,11 +66,26 @@ def load_macro_config(config_file: Path) -> MacroConfig:
         if isinstance(pattern_config, str):
             macro_name = pattern_config
             emit_base = True
+            extra_kwargs = {}
         elif isinstance(pattern_config, dict):
             macro_name = pattern_config.get("macro")
             if not isinstance(macro_name, str):
                 raise ValueError(f"model_patterns entry '{pattern}' must define a string 'macro'")
             emit_base = pattern_config.get("emit_base", True)
+
+            extra_kwargs = {}
+            for k, v in pattern_config.items():
+                if k not in {"macro", "emit_base"}:
+                    norm_k = normalize_macro_name(k)
+                    if isinstance(v, str):
+                        norm_v = (
+                            normalize_macro_references(v, name_map)
+                            if "${" in v
+                            else name_map.get(v, normalize_macro_name(v))
+                        )
+                    else:
+                        norm_v = v
+                    extra_kwargs[norm_k] = norm_v
         else:
             raise ValueError(f"model_patterns entry '{pattern}' must be a string or object")
 
@@ -79,7 +94,12 @@ def load_macro_config(config_file: Path) -> MacroConfig:
             if "${" in macro_name
             else name_map.get(macro_name, normalize_macro_name(macro_name))
         )
-        normalized_patterns[pattern] = ModelPatternConfig(macro=normalized_macro_name, emit_base=emit_base)
+        if "variants" in extra_kwargs and isinstance(extra_kwargs["variants"], list):
+            extra_kwargs["variants"] = [normalize_macro_name(v) for v in extra_kwargs["variants"]]
+
+        normalized_patterns[pattern] = ModelPatternConfig(
+            macro=normalized_macro_name, emit_base=emit_base, **extra_kwargs
+        )
 
     raw_variants: list[dict[str, str]] = raw_data.get("variants", [])
     normalized_variants = []
@@ -94,10 +114,26 @@ def load_macro_config(config_file: Path) -> MacroConfig:
             )
         normalized_variants.append(normalized_variant)
 
+    raw_presets: dict[str, list[dict[str, str]]] = raw_data.get("variant_presets", {})
+    normalized_presets = {}
+    for preset_name, items in raw_presets.items():
+        normalized_preset_name = normalize_macro_name(preset_name)
+        normalized_items = []
+        for item in items:
+            macro_value = item.get("macro", "")
+            normalized_macro = (
+                normalize_macro_references(macro_value, name_map)
+                if "${" in macro_value
+                else name_map.get(macro_value, normalize_macro_name(macro_value))
+            )
+            normalized_items.append(VariantPresetItem(suffix=item.get("suffix", ""), macro=normalized_macro))
+        normalized_presets[normalized_preset_name] = normalized_items
+
     return MacroConfig(
         macros=normalized_macros,
         model_patterns=normalized_patterns,
         variants=normalized_variants,
+        variant_presets=normalized_presets,
     )
 
 

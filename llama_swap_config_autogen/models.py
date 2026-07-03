@@ -34,21 +34,31 @@ class Config(BaseModel):
     macros: dict[str, str] = Field(default_factory=dict)
     model_patterns: dict[str, Any] = Field(default_factory=dict)
     variants: list[dict[str, Any]] = Field(default_factory=list)
+    variant_presets: dict[str, Any] = Field(default_factory=dict)
     mmproj: MmprojConfig = Field(default_factory=MmprojConfig)
     model_labels: ModelLabelsConfig = Field(default_factory=ModelLabelsConfig)
     default_ttl: int = Field(default=300)
     vram_estimation: bool = Field(default=False)
 
 
+class VariantPresetItem(BaseModel):
+    suffix: str
+    macro: str
+
+
 class ModelPatternConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     macro: str
     emit_base: bool = Field(default=True)
+    variants: list[str] = Field(default_factory=list)
 
 
 class MacroConfig(BaseModel):
     macros: dict[str, str] = Field(default_factory=dict)
     model_patterns: dict[str, ModelPatternConfig] = Field(default_factory=dict)
     variants: list[dict[str, Any]] = Field(default_factory=list)
+    variant_presets: dict[str, list[VariantPresetItem]] = Field(default_factory=dict)
 
 
 class Settings(BaseModel):

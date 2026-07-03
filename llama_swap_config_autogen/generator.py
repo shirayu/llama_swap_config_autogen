@@ -366,6 +366,19 @@ def build_vram_label(
         return None
 
 
+def resolve_variant_macro_template(template: str, pattern_config: ModelPatternConfig) -> str:
+    """Resolve placeholders like ${cpu-macro} in a variant macro template using pattern_config's extra fields."""
+    import re
+
+    def replace_placeholder(match: re.Match[str]) -> str:
+        var_name = match.group(1)
+        if pattern_config.model_extra and var_name in pattern_config.model_extra:
+            return str(pattern_config.model_extra[var_name])
+        return f"${{{var_name}}}"
+
+    return re.sub(r"\$\{([^}]+)\}", replace_placeholder, template)
+
+
 def generate_model_configs(settings: Settings, config: Config) -> dict[str, YamlModelConfig]:
     # Load macro configuration
     macro_config = load_macro_config(settings.config_file)
@@ -475,6 +488,79 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         cmd=no_mmproj_cmd,
                         name=no_mmproj_name,
                     )
+
+            # Generate preset-based variant models
+            if pattern_config.variants:
+                for preset_name in pattern_config.variants:
+                    preset_items = macro_config.variant_presets.get(preset_name, [])
+                    for preset_item in preset_items:
+                        suffix = preset_item.suffix
+                        macro_template = preset_item.macro
+
+                        # Resolve variables (arguments) passed from pattern_config.model_extra
+                        variant_macro = resolve_variant_macro_template(macro_template, pattern_config)
+
+                        cleaned_suffix = format_suffix_for_id(suffix)
+                        variant_id = f"{model_id}-{cleaned_suffix}"
+                        variant_display_name = f"{model_name}{suffix}"
+
+                        if variant_id not in models:
+                            variant_cmd = format_command_with_macro(
+                                str(path_model),
+                                variant_macro,
+                                mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
+                                mmproj_arg=mmproj_config.arg,
+                            )
+                            # Estimate VRAM for variant
+                            variant_vram_label = None
+                            if metadata_cache is not None:
+                                expanded_variant_cmd = expand_macro_expression(variant_macro, macro_config.macros)
+                                before_count = len(metadata_cache.entries)
+                                variant_vram_label = build_vram_label(
+                                    path_model,
+                                    expanded_variant_cmd,
+                                    0,
+                                    metadata_cache,
+                                    mmproj_path=selected_mmproj_path,
+                                )
+                                if len(metadata_cache.entries) != before_count:
+                                    cache_dirty = True
+                            variant_full_name = format_model_name(variant_display_name, variant_vram_label, model_label)
+                            ensure_unique_model_name(variant_full_name, variant_id, name_to_id)
+                            models[variant_id] = YamlModelConfig(
+                                ttl=settings.default_ttl, cmd=variant_cmd, name=variant_full_name
+                            )
+                        if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
+                            no_mmproj_variant_id = (
+                                f"{variant_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
+                            )
+                            if no_mmproj_variant_id not in models:
+                                no_mmproj_variant_cmd = format_command_with_macro(str(path_model), variant_macro)
+                                no_mmproj_variant_vram_label = None
+                                if metadata_cache is not None:
+                                    expanded_variant_cmd = expand_macro_expression(variant_macro, macro_config.macros)
+                                    before_count = len(metadata_cache.entries)
+                                    no_mmproj_variant_vram_label = build_vram_label(
+                                        path_model,
+                                        expanded_variant_cmd,
+                                        0,
+                                        metadata_cache,
+                                    )
+                                    if len(metadata_cache.entries) != before_count:
+                                        cache_dirty = True
+                                if no_mmproj_variant_vram_label:
+                                    base_variant_name = format_model_name(
+                                        variant_display_name, no_mmproj_variant_vram_label
+                                    )
+                                else:
+                                    base_variant_name = variant_display_name
+                                no_mmproj_variant_name = f"{base_variant_name}{mmproj_config.no_mmproj_suffix}"
+                                ensure_unique_model_name(no_mmproj_variant_name, no_mmproj_variant_id, name_to_id)
+                                models[no_mmproj_variant_id] = YamlModelConfig(
+                                    ttl=settings.default_ttl,
+                                    cmd=no_mmproj_variant_cmd,
+                                    name=no_mmproj_variant_name,
+                                )
 
             # Generate variant models
             for variant in macro_config.variants:

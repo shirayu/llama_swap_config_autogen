@@ -93,17 +93,23 @@ macros:
 #   gemma-4-31b/it
 model_patterns:
   # Reasoning-focused models
-  "r1-distill": "deepseek-r1-params"
+  "r1-distill":
+    macro: "deepseek-r1-params"
+    fast-params: "${deepseek-r1-params} ${inference-fast}"
+    variants: [fast]
+
   "gpt-oss-120b": "gpt-oss-120b-params"
   "gpt-oss-20b": "gpt-oss-20b-params"
 
   # General-purpose large models
-  "qwen3-30b/instruct-2507": "qwen-context-large-params"
-  "gemma-3-27b": "gemma-large-params"
-  # Use object form when suffix-less base names should be hidden.
-  # "gemma-4-":
-  #   macro: "default-params"
-  #   emit_base: false
+  "qwen3-30b/instruct-2507":
+    macro: "qwen-context-large-params"
+    cpu-params: "qwen-cpu-params"
+    variants: [cpu]
+
+  "gemma-3-27b":
+    macro: "gemma-large-params"
+    variants: [memory-efficient]
 
   # Coding-focused models
   "qwen3-30b/coder-instruct": "qwen-coder-params"
@@ -113,20 +119,17 @@ model_patterns:
   "Phi-3": "memory-constrained-params"
   "TinyLlama": "memory-constrained-params"
 
-# Variant generation settings (optional)
-# Automatically generate variations of the same model with different settings
-variants:
-  # CPU variant
-  - base_pattern: "qwen3-30b/instruct-2507"
-    suffix: " (with CPU)"
-    macro: "qwen-cpu-params"
+# Variant presets (optional)
+# Defines templates for generating multiple variations of models.
+variant_presets:
+  cpu:
+    - suffix: " (with CPU)"
+      macro: "${cpu-params}"
 
-  # Memory-constrained variant
-  - base_pattern: "gemma-3-27b"
-    suffix: " (Memory Efficient)"
-    macro: "memory-constrained-params"
+  memory-efficient:
+    - suffix: " (Memory Efficient)"
+      macro: "memory-constrained-params"
 
-  # Fast inference variant
-  - base_pattern: "r1-distill"
-    suffix: " (Fast)"
-    macro: "${deepseek-r1-params} ${inference-fast}"
+  fast:
+    - suffix: " (Fast)"
+      macro: "${fast-params}"
