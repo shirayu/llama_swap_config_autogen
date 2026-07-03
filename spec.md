@@ -46,7 +46,7 @@ mmproj:                              # optional
 model_labels:                        # optional
   mmproj_default: <string>            # default: " 🌐"
   rules:
-    - pattern: <substring>
+    - pattern: <substring or list[substring]>
       label: <string>
       requires_mmproj: <bool>         # optional, default: false
 

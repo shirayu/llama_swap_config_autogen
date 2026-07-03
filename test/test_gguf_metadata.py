@@ -15,6 +15,7 @@ from llama_swap_config_autogen.generator import (
     extract_context_length,
     extract_ngl,
     generate_full_config,
+    select_model_label,
 )
 from llama_swap_config_autogen.gguf_metadata import (
     GGUFMetadata,
@@ -848,3 +849,38 @@ class TestVramEstimationEdgeCases:
         assert "gemma-4-12b:Q4_K_M" not in result["models"]
         assert "gemma-4-12b:Q4_K_M--32k" in result["models"]
         assert "gemma-4-12b:Q4_K_M--48k" in result["models"]
+
+
+class TestSelectModelLabel:
+    """Test select_model_label with string and list patterns."""
+
+    def test_select_model_label_list_patterns(self):
+        from llama_swap_config_autogen.models import ModelLabelsConfig, ModelLabelRule
+
+        model_labels = ModelLabelsConfig(
+            mmproj_default=" 🌐",
+            rules=[
+                ModelLabelRule(
+                    pattern=["qwen-vl", "gemma-3"],
+                    label=" 👁️",
+                    requires_mmproj=True,
+                ),
+                ModelLabelRule(
+                    pattern="whisper",
+                    label=" 🎧",
+                ),
+            ],
+        )
+
+        # Matched by list pattern (qwen-vl) with mmproj
+        assert select_model_label(model_labels, "qwen-vl-model", "Qwen VL", "qwen-vl.gguf", True) == " 👁️"
+        # Matched by list pattern (gemma-3) with mmproj
+        assert select_model_label(model_labels, "gemma-3-model", "Gemma 3", "gemma-3.gguf", True) == " 👁️"
+        # List pattern matched but lacks mmproj, falls back to empty
+        assert select_model_label(model_labels, "gemma-3-model", "Gemma 3", "gemma-3.gguf", False) == ""
+
+        # Matched by string pattern
+        assert select_model_label(model_labels, "whisper-model", "Whisper", "whisper.gguf", False) == " 🎧"
+
+        # Not matched
+        assert select_model_label(model_labels, "other-model", "Other", "other.gguf", False) == ""

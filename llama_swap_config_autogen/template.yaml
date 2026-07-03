@@ -10,6 +10,33 @@ models:
   - /opt/llama.cpp/models
   # - /home/user/models  # Add additional directories if any
 
+# Multimodal projector configuration (optional)
+mmproj:
+  enabled: true
+  auto_attach: true
+  arg: --mmproj
+  generate_no_mmproj_variant: false
+  no_mmproj_suffix: ' (no mmproj)'
+  overrides: {}
+
+# Display labels for model list (optional)
+model_labels:
+  mmproj_default: ' 🌐'
+  rules:
+    - pattern:
+        - qwen-vl
+        - qwen3-vl
+        - glm-4.6v
+        - gemma-3
+        - gemma-4
+        - small-3.2
+      label: ' 👁️'
+      requires_mmproj: true
+    - pattern: whisper
+      label: ' 🎧'
+    - pattern: kokoro
+      label: ' 🔊'
+
 # Basic settings
 default_ttl: 300              # Model lifetime (seconds)
 healthCheckTimeout: 240       # Health check timeout (seconds)

@@ -17,7 +17,7 @@ class MmprojConfig(BaseModel):
 
 
 class ModelLabelRule(BaseModel):
-    pattern: str
+    pattern: str | list[str]
     label: str
     requires_mmproj: bool = Field(default=False)
 

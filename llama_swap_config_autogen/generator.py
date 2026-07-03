@@ -109,7 +109,9 @@ def build_model_name(display_name: str, quantization: str) -> str:
     return f"{display_name}:{quantization}"
 
 
-def matches_model_pattern(pattern: str, *model_identifiers: str) -> bool:
+def matches_model_pattern(pattern: str | list[str], *model_identifiers: str) -> bool:
+    if isinstance(pattern, list):
+        return any(matches_model_pattern(p, *model_identifiers) for p in pattern)
     normalized_pattern = pattern.lower()
     return any(normalized_pattern in identifier.lower() for identifier in model_identifiers)
 

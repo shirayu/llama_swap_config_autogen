@@ -38,22 +38,13 @@ mmproj:
 model_labels:
   mmproj_default: ' 🌐'
   rules:
-    - pattern: qwen-vl
-      label: ' 👁️'
-      requires_mmproj: true
-    - pattern: qwen3-vl
-      label: ' 👁️'
-      requires_mmproj: true
-    - pattern: glm-4.6v
-      label: ' 👁️'
-      requires_mmproj: true
-    - pattern: gemma-3
-      label: ' 👁️'
-      requires_mmproj: true
-    - pattern: gemma-4
-      label: ' 👁️'
-      requires_mmproj: true
-    - pattern: small-3.2
+    - pattern:
+        - qwen-vl
+        - qwen3-vl
+        - glm-4.6v
+        - gemma-3
+        - gemma-4
+        - small-3.2
       label: ' 👁️'
       requires_mmproj: true
     - pattern: whisper
