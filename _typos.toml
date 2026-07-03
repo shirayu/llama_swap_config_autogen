@@ -8,4 +8,4 @@ noInferrableTypes = "noInferrableTypes"
 ot = "ot"
 
 [files]
-extend-exclude = ['package*.json', '*.min.js']
+extend-exclude = ['package*.json', '*.min.js', 'llama-swap-config-schema.json']
