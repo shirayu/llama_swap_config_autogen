@@ -779,7 +779,8 @@ def generate_full_config(settings: Settings, config: Config) -> dict:
     # Create llama-swap format configuration
     output_config = {}
 
-    # Merge any extra global configuration items (like captureBuffer, healthCheckTimeout, logLevel, startPort) from config.model_extra
+    # Merge any extra global configuration items
+    # (like captureBuffer, healthCheckTimeout, logLevel, startPort) from config.model_extra
     if config.model_extra:
         for k, v in config.model_extra.items():
             if k not in {"vram_estimation"}:

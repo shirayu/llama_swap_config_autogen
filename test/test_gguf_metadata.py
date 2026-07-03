@@ -855,7 +855,7 @@ class TestSelectModelLabel:
     """Test select_model_label with string and list patterns."""
 
     def test_select_model_label_list_patterns(self):
-        from llama_swap_config_autogen.models import ModelLabelsConfig, ModelLabelRule
+        from llama_swap_config_autogen.models import ModelLabelRule, ModelLabelsConfig
 
         model_labels = ModelLabelsConfig(
             mmproj_default=" 🌐",

@@ -372,8 +372,6 @@ class TestParameterizedMacros:
         """Test normalization of macro references with arguments"""
         from llama_swap_config_autogen.config import normalize_macro_references
 
-        name_map = {"cpu-offload": "cpu-offload"}
-
         # Dot in parameter value should be preserved, macro name normalized
         expr = "${cpu.offload:12,16} and ${some.macro:3.5}"
         name_map_extended = {"cpu-offload": "cpu-offload", "some-macro": "some-macro"}
