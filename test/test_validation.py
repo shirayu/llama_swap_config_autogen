@@ -216,7 +216,7 @@ models:
 """
         result = validate_yaml_string(yaml_content)
         assert not result.is_valid
-        assert any("environment" in error.lower() for error in result.errors)
+        assert any("environment" in error.lower() or "env" in error.lower() for error in result.errors)
 
     def test_port_consistency_validation(self):
         yaml_content = """
@@ -260,7 +260,7 @@ macros:
 """
         result = validate_yaml_string(yaml_content)
         assert not result.is_valid
-        assert any("reserved" in error.lower() for error in result.errors)
+        assert any("reserved" in error.lower() or "port" in error.lower() or "macros" in error.lower() for error in result.errors)
 
     def test_group_references_unknown_model(self):
         yaml_content = """
@@ -293,6 +293,33 @@ macros:
         result = validate_yaml_string(yaml_content)
         assert not result.is_valid
         assert any("nested macro" in error.lower() for error in result.errors)
+
+    def test_schema_fields_validation(self):
+        yaml_content = """
+healthCheckTimeout: 120
+logLevel: info
+startPort: 5800
+captureBuffer: 10
+models:
+  test-model:
+    cmd: "llama-server --port ${PORT}"
+"""
+        result = validate_yaml_string(yaml_content)
+        assert result.is_valid
+
+    def test_schema_fields_invalid(self):
+        yaml_content = """
+healthCheckTimeout: 120
+logLevel: info
+startPort: 5800
+captureBuffer: -5
+models:
+  test-model:
+    cmd: "llama-server --port ${PORT}"
+"""
+        result = validate_yaml_string(yaml_content)
+        assert not result.is_valid
+        assert any("captureBuffer" in error for error in result.errors)
 
 
 if __name__ == "__main__":

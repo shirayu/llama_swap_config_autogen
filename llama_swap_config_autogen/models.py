@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MmprojConfig(BaseModel):
@@ -28,6 +28,8 @@ class ModelLabelsConfig(BaseModel):
 
 
 class Config(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     models: list[Path] = Field(description="List of model directory paths")
     macros: dict[str, str] = Field(default_factory=dict)
     model_patterns: dict[str, Any] = Field(default_factory=dict)

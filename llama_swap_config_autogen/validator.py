@@ -1,7 +1,7 @@
-"""YAML validation logic for llama-swap configurations."""
-
+import json
 from pathlib import Path
 
+import jsonschema
 import yaml
 from pydantic import ValidationError
 
@@ -78,10 +78,59 @@ def validate_yaml_syntax(yaml_path: Path) -> tuple[dict, list[str]]:
         return {}, errors
 
 
+def validate_against_schema(data: dict) -> ValidationResult:
+    """Validate data against the official llama-swap-config-schema.json."""
+    result = ValidationResult(True)
+
+    # Search for the schema file
+    schema_candidates = [
+        Path(__file__).parent / "llama-swap-config-schema.json",
+        Path(__file__).parents[1] / "llama-swap-config-schema.json",
+        Path.cwd() / "llama-swap-config-schema.json",
+    ]
+
+    schema_path = None
+    for candidate in schema_candidates:
+        if candidate.exists():
+            schema_path = candidate
+            break
+
+    if not schema_path:
+        result.add_warning(
+            "Official llama-swap config schema file 'llama-swap-config-schema.json' not found. "
+            "Skipping schema validation."
+        )
+        return result
+
+    try:
+        with schema_path.open("r", encoding="utf-8") as f:
+            schema = json.load(f)
+
+        validator = jsonschema.Draft7Validator(schema)
+        errors = sorted(validator.iter_errors(data), key=lambda e: e.path)
+
+        for error in errors:
+            path = " → ".join(str(p) for p in error.path) if error.path else "root"
+            result.add_error(f"Schema violation at '{path}': {error.message}")
+
+    except Exception as e:
+        result.add_error(f"JSON Schema validation failed to run: {e}")
+
+    return result
+
+
 def validate_with_pydantic(data: dict, lenient: bool = False) -> ValidationResult:
     """Validate configuration data using Pydantic models."""
     result = ValidationResult(True)
 
+    # Step 1: Validate against official JSON Schema first
+    schema_result = validate_against_schema(data)
+    if not schema_result.is_valid:
+        result.is_valid = False
+        result.errors.extend(schema_result.errors)
+    result.warnings.extend(schema_result.warnings)
+
+    # Step 2: Validate business logic using Pydantic model
     try:
         # Validate using Pydantic model
         config = LlamaSwapConfig(**data)

@@ -680,6 +680,12 @@ def generate_full_config(settings: Settings, config: Config) -> dict:
         "startPort": settings.start_port,
     }
 
+    # Merge any extra global configuration items (like captureBuffer) from config.model_extra
+    if config.model_extra:
+        for k, v in config.model_extra.items():
+            if k not in {"vram_estimation"}:
+                output_config[k] = v
+
     # Add model configurations and collect commands simultaneously
     output_config["models"] = {}
     all_commands = []
