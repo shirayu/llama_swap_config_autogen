@@ -63,55 +63,35 @@ startPort: 9091               # Starting port number
 macros:
   # Base settings
   "binary": "/opt/llama.cpp/bin/llama-server"
-  "default-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on ${layers-default} ${context-default}"
+  "default-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on ${ngl:999} ${ctx:32768}"
   "reasoning-base": "${default-params} --reasoning-format none"
 
-  # Common parts: Context length
-  "context-medium": "--ctx-size 32768"
-  "context-large": "--ctx-size 65536"
-  "context-ultra": "--ctx-size 131072"
-  "context-full": "-c 0"
-  "context-default": "${context-medium}"
+  # Parameterized helpers
+  "ctx": "--ctx-size ${1}"
+  "ngl": "--n-gpu-layers ${1}"
+  "cpu-offload": "--n-cpu-moe ${1} --threads ${2}"
 
-  # Common parts: GPU settings
-  "layers-mini": "--n-gpu-layers 13"
-  "layers-medium": "--n-gpu-layers 25"
-  "layers-full": "--n-gpu-layers 999"
-  "layers-default": "${layers-full}"
-
-  # Common parts: CPU settings
+  # Common parts: CPU / sampling / memory / performance
   "cpu-offload-ffn-full": "-ot '.*.ffn_.*_exps.=CPU'"
   "cpu-offload-moe-max": "--cpu-moe"
-  "cpu-offload-moe-12": "--n-cpu-moe 12"
-  "cpu-offload-moe-24": "--n-cpu-moe 24"
-  "cpu-offload-moe-36": "--n-cpu-moe 36"
-  "cpu-offload-moe-default": "${cpu-offload-moe-12}"
-
-  # Common parts: Temperature settings
   "temp-reasoning": "--temp 0.7 --top-p 0.9"
-  "temp-conding": "--temp 0.1"
-
-  # Common parts: Memory settings
+  "temp-coding": "--temp 0.1"
   "low-memory": "--no-mmap --mlock"
   "memory-efficient": "--cache-type-k q4_0 --cache-type-v q4_0"
-
-  # Common parts: Performance settings
   "inference-fast": "--batch-size 512 --ubatch-size 512"
 
   # Model-specific macros
   "gpt-oss-20b-params": "${reasoning-base} -c 0 -fa"
   "deepseek-r1-params": "${reasoning-base} ${temp-reasoning}"
-  "gemma-large-params": "${default-params} ${layers-medium} ${context-medium}"
-  "gpt-oss-120b-params": "${reasoning-base} ${layers-mini} --ctx-size 16384 --no-mmap"
-  "qwen-coder-params": "${default-params} ${temp-coding} ${context-medium}"
-  "qwen-cpu-params": "${default-params} ${cpu-offload-moe-default} ${context-large}"
-  "qwen-context-large-params": "${default-params} ${context-large}"
+  "gemma-large-params": "${default-params} ${ngl:25} ${ctx:32768}"
+  "gpt-oss-120b-params": "${reasoning-base} ${ngl:13} --ctx-size 16384 --no-mmap"
+  "qwen-coder-params": "${default-params} ${temp-coding} ${ctx:32768}"
+  "qwen-cpu-params": "${default-params} ${cpu-offload:12,16} ${ctx:65536}"
+  "qwen-context-large-params": "${default-params} ${ctx:65536}"
 
-  # New model macros
+  # Presets
   "memory-constrained-params": "${default-params} ${low-memory} ${memory-efficient}"
-
-  # Combined macros
-  "long-context-params": "${default-params} ${context-large}"
+  "long-context-params": "${default-params} ${ctx:65536}"
 
 # Model name patterns and macro mapping
 # Patterns are matched case-insensitively against the generated display name,

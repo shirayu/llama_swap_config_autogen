@@ -236,13 +236,15 @@ def extract_context_length(cmd: str, fallback: int) -> int:
 
 def expand_macro_expression(expression: str, all_macros: dict[str, str]) -> str:
     """Expand either a macro name or an arbitrary expression containing ${...} references."""
-    if expression in all_macros:
+    expression_name = expression.split(":", 1)[0] if ":" in expression else expression
+    if expression_name in all_macros or expression in all_macros:
         return expand_macro(expression, all_macros)
 
     expanded = expression
-    for macro_name in re.findall(r"\$\{([^}]+)\}", expression):
+    for macro_match in re.findall(r"\$\{([^}]+)\}", expression):
+        macro_name = macro_match.split(":", 1)[0] if ":" in macro_match else macro_match
         if macro_name in all_macros:
-            expanded = expanded.replace(f"${{{macro_name}}}", expand_macro(macro_name, all_macros))
+            expanded = expanded.replace(f"${{{macro_match}}}", expand_macro(macro_match, all_macros))
     return deduplicate_parameters(expanded)
 
 
@@ -696,20 +698,31 @@ def deduplicate_parameters(expanded_value: str) -> str:
     return " ".join(result)
 
 
-def expand_macro(macro_name: str, all_macros: dict[str, str], visited: set[str] | None = None) -> str:
-    """Recursively expand a macro by resolving all nested macro references"""
+def expand_macro(macro_name_with_args: str, all_macros: dict[str, str], visited: set[str] | None = None) -> str:
+    """Recursively expand a macro by resolving all nested macro references and positional parameters"""
     if visited is None:
         visited = set()
+
+    # Parse macro name and arguments
+    macro_name = macro_name_with_args
+    args = []
+    if ":" in macro_name_with_args:
+        macro_name, args_str = macro_name_with_args.split(":", 1)
+        args = args_str.split(",")
 
     if macro_name in visited:
         raise ValueError(f"Circular macro reference detected: {macro_name}")
 
     if macro_name not in all_macros:
         # Return as-is if macro not found (could be built-in like ${PORT})
-        return f"${{{macro_name}}}"
+        return f"${{{macro_name_with_args}}}"
 
     visited.add(macro_name)
     macro_value = all_macros[macro_name]
+
+    # Replace positional parameters ${1}, ${2}, etc. with arguments
+    for idx, arg in enumerate(args):
+        macro_value = macro_value.replace(f"${{{idx + 1}}}", arg)
 
     # Find all nested macro references
     nested_macros = re.findall(r"\$\{([^}]+)\}", macro_value)
@@ -717,7 +730,8 @@ def expand_macro(macro_name: str, all_macros: dict[str, str], visited: set[str] 
     # Expand each nested macro
     expanded_value = macro_value
     for nested_macro in nested_macros:
-        if nested_macro in all_macros:
+        nested_name = nested_macro.split(":", 1)[0] if ":" in nested_macro else nested_macro
+        if nested_name in all_macros:
             # Recursively expand nested macro
             nested_expanded = expand_macro(nested_macro, all_macros, visited.copy())
             # Replace the macro reference with its expanded value
@@ -741,7 +755,8 @@ def extract_used_macros_from_commands(commands: list[str], all_macros: dict[str,
 
     # Process each macro and expand it
     for macro_name in to_process:
-        if macro_name not in all_macros:
+        base_name = macro_name.split(":", 1)[0] if ":" in macro_name else macro_name
+        if base_name not in all_macros:
             continue
 
         # Expand the macro to resolve all nested references

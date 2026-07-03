@@ -342,3 +342,52 @@ class TestVariantPresets:
 
         # cpu-macro should be resolved, global-macro should be kept as-is
         assert resolved == "some prefix qwen-cpu-params and global ${global-macro}"
+
+
+class TestParameterizedMacros:
+    """Test parameterized macro expansion (arguments with positional parameters)"""
+
+    def test_parameterized_macro_expansion(self):
+        """Test expanding macros with positional parameters ${1}, ${2}"""
+        macros = {
+            "ctx": "--ctx-size ${1}",
+            "ngl": "--n-gpu-layers ${1}",
+            "cpu-offload": "--n-cpu-moe ${1} --threads ${2}",
+            "default-params": "--common ${ngl:999} ${ctx:32768}",
+            "cpu-default": "${cpu-offload:12,16}",
+        }
+
+        # Simple single parameter expansion
+        assert expand_macro("ctx:4096", macros) == "--ctx-size 4096"
+        assert expand_macro("ngl:15", macros) == "--n-gpu-layers 15"
+
+        # Multi-parameter expansion
+        assert expand_macro("cpu-offload:12,16", macros) == "--n-cpu-moe 12 --threads 16"
+
+        # Nested parameterized macro expansion
+        assert expand_macro("default-params", macros) == "--common --n-gpu-layers 999 --ctx-size 32768"
+        assert expand_macro("cpu-default", macros) == "--n-cpu-moe 12 --threads 16"
+
+    def test_parameterized_macro_normalization(self):
+        """Test normalization of macro references with arguments"""
+        from llama_swap_config_autogen.config import normalize_macro_references
+
+        name_map = {"cpu-offload": "cpu-offload"}
+
+        # Dot in parameter value should be preserved, macro name normalized
+        expr = "${cpu.offload:12,16} and ${some.macro:3.5}"
+        name_map_extended = {"cpu-offload": "cpu-offload", "some-macro": "some-macro"}
+        normalized = normalize_macro_references(expr, name_map_extended)
+        assert normalized == "${cpu-offload:12,16} and ${some-macro:3.5}"
+
+    def test_extract_parameterized_macros(self):
+        """Test extracting parameterized macros from commands"""
+        commands = [
+            "command ${cpu-offload:12,16}",
+        ]
+        macros = {
+            "cpu-offload": "--n-cpu-moe ${1} --threads ${2}",
+        }
+        result = extract_used_macros_from_commands(commands, macros)
+        assert "cpu-offload:12,16" in result
+        assert result["cpu-offload:12,16"] == "--n-cpu-moe 12 --threads 16"

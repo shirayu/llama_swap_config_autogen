@@ -224,17 +224,17 @@ models:
   - /opt/data/llm/models
 
 default_ttl: 300
-health_check_timeout: 240
-log_level: warn
-start_port: 9091
+healthCheckTimeout: 240
+logLevel: warn
+startPort: 9091
 
 macros:
   binary: /app/llama-server
   common-base: --jinja --flash-attn on
-  layers-default: --n-gpu-layers 999
-  context-default: --ctx-size 32768
-  default-params: ${common-base} ${layers-default} ${context-default}
-  qwen-cpu: ${default-params} --n-cpu-moe 12 --threads 16 --ctx-size 65536
+  ngl: --n-gpu-layers ${1}
+  ctx: --ctx-size ${1}
+  default-params: ${common-base} ${ngl:999} ${ctx:32768}
+  qwen-cpu: ${default-params} --n-cpu-moe 12 --threads 16 ${ctx:65536}
   gemma-off: ${default-params} --reasoning off
 
 model_patterns:

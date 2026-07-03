@@ -19,9 +19,15 @@ def normalize_macro_references(value: str, name_map: dict[str, str]) -> str:
     """Normalize macro references inside a macro expression."""
 
     def replace_ref(match: re.Match[str]) -> str:
-        ref_name = match.group(1)
+        ref_expression = match.group(1)
+        ref_name = ref_expression
+        args_part = ""
+        if ":" in ref_expression:
+            ref_name, args_part = ref_expression.split(":", 1)
+            args_part = ":" + args_part
+
         normalized_ref = name_map.get(ref_name, normalize_macro_name(ref_name))
-        return f"${{{normalized_ref}}}"
+        return f"${{{normalized_ref}{args_part}}}"
 
     return MACRO_REF_PATTERN.sub(replace_ref, value)
 
