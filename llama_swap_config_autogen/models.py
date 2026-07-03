@@ -37,9 +37,6 @@ class Config(BaseModel):
     mmproj: MmprojConfig = Field(default_factory=MmprojConfig)
     model_labels: ModelLabelsConfig = Field(default_factory=ModelLabelsConfig)
     default_ttl: int = Field(default=300)
-    health_check_timeout: int = Field(default=240)
-    log_level: str = Field(default="info")
-    start_port: int = Field(default=9091)
     vram_estimation: bool = Field(default=False)
 
 
@@ -57,9 +54,6 @@ class MacroConfig(BaseModel):
 class Settings(BaseModel):
     models_dirs: list[Path]
     default_ttl: int = Field(default=300)
-    health_check_timeout: int = Field(default=240)
-    log_level: str = Field(default="info")
-    start_port: int = Field(default=9091)
     config_file: Path
     vram_estimation: bool = Field(default=False)
 

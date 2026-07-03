@@ -106,9 +106,6 @@ def create_settings_from_config(config: Config, config_file: Path) -> Settings:
     return Settings(
         models_dirs=config.models,
         default_ttl=config.default_ttl,
-        health_check_timeout=config.health_check_timeout,
-        log_level=config.log_level,
-        start_port=config.start_port,
         config_file=config_file,
         vram_estimation=config.vram_estimation,
     )

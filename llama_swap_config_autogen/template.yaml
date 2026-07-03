@@ -12,9 +12,9 @@ models:
 
 # Basic settings
 default_ttl: 300              # Model lifetime (seconds)
-health_check_timeout: 240     # Health check timeout (seconds)
-log_level: warn               # Log level (debug, info, warn, error)
-start_port: 9091              # Starting port number
+healthCheckTimeout: 240       # Health check timeout (seconds)
+logLevel: warn                # Log level (debug, info, warn, error)
+startPort: 9091               # Starting port number
 
 # llama-swap official routing / groups (optional)
 # Controls model swapping behavior using official groups or matrix configs.

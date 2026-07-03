@@ -674,13 +674,9 @@ def generate_full_config(settings: Settings, config: Config) -> dict:
     macro_config = load_macro_config(settings.config_file)
 
     # Create llama-swap format configuration
-    output_config = {
-        "healthCheckTimeout": settings.health_check_timeout,
-        "logLevel": settings.log_level,
-        "startPort": settings.start_port,
-    }
+    output_config = {}
 
-    # Merge any extra global configuration items (like captureBuffer) from config.model_extra
+    # Merge any extra global configuration items (like captureBuffer, healthCheckTimeout, logLevel, startPort) from config.model_extra
     if config.model_extra:
         for k, v in config.model_extra.items():
             if k not in {"vram_estimation"}:

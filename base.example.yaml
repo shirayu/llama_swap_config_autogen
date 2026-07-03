@@ -6,9 +6,9 @@ models:
   # Any .gguf outside those depths will raise an error.
 
 default_ttl: 300
-health_check_timeout: 240
-log_level: warn
-start_port: 9091
+healthCheckTimeout: 240
+logLevel: warn
+startPort: 9091
 vram_estimation: true
 captureBuffer: 0
 
