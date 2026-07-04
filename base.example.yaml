@@ -89,6 +89,8 @@ macros:
   qwen-coder-params: ${default-params} ${temp-coding} ${ctx:32768}
   qwen-cpu-params: ${default-params} ${cpu-offload:12,16} ${ctx:65536}
   qwen-cpu-params-big: ${default-params} ${ngl:15} ${cpu-offload:12,16} ${ctx:65536}
+  qwen-mtp-params: ${default-params} --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.8 --parallel 1
+  qwen-mtp-thinking-off-params: ${qwen-mtp-params} --reasoning off
 
   # Utility presets
   short-ctx-params: ${default-params} ${ctx:4096}
@@ -148,6 +150,11 @@ model_patterns:
     cpu-params: qwen-cpu-params
     thinking-off-params: thinking-off-params
     variants: [cpu, short-ctx, thinking-off]
+
+  qwen3.6-35b/a3b-mtp:
+    macro: qwen-mtp-params
+    thinking-off-params: qwen-mtp-thinking-off-params
+    variants: [short-ctx, thinking-off]
 
   swallow-70b/instruct:
     macro: default-params
