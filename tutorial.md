@@ -10,7 +10,8 @@ This tutorial guides you through the advanced configuration features of `llama-s
 2. [Parameterized Macros: Eliminating Numeric Duplications](#2-parameterized-macros-eliminating-numeric-duplications)
 3. [Variant Presets with Implicit Argument Binding](#3-variant-presets-with-implicit-argument-binding)
 4. [Model Labels with Multi-Pattern Lists](#4-model-labels-with-multi-pattern-lists)
-5. [Put It All Together: A Complete base.yaml Example](#5-put-it-all-together-a-complete-baseyaml-example)
+5. [Explicit Multi-Modal Projection (mmproj) Binding](#5-explicit-multi-modal-projection-mmproj-binding)
+6. [Put It All Together: A Complete base.yaml Example](#6-put-it-all-together-a-complete-baseyaml-example)
 
 ---
 
@@ -146,7 +147,32 @@ This saves you from copying and pasting the same rule block for every multimodal
 
 ---
 
-## 5. Put It All Together: A Complete base.yaml Example
+## 5. Explicit Multi-Modal Projection (mmproj) Binding
+
+When configuring multimodal (vision) models, you might want to share a single `mmproj` file among different variants of the same model family, even if the variants are stored in different directories (e.g., when a fine-tuned model doesn't ship with its own `mmproj` file).
+
+Instead of manually maintaining absolute paths in a global `mmproj.overrides` section, you can explicitly attach an `mmproj` file directly inside the `model_patterns` mapping. You can specify:
+
+- An absolute path,
+- A relative path from the config file directory, or
+- Just the **filename** of any mmproj file discovered during directory scanning (case-insensitive).
+
+```yaml
+model_patterns:
+  # The fine-tuned variant doesn't have an mmproj file in its own directory.
+  # We bind the mmproj file from the 'it' variant by simply writing its filename.
+  gemma-4-31b:
+    macro: gemma-4-32k-q8-off-params
+    emit_base: false
+    variants: [gemma-4-variants]
+    mmproj: gemma-4-31b-mmproj-BF16.gguf
+```
+
+Using this pattern matches the target model family prefix (`gemma-4-31b`) and resolves the `mmproj` filename automatically to the scanned absolute path of the file, cleanly applying it to all matching variants.
+
+---
+
+## 6. Put It All Together: A Complete base.yaml Example
 
 Here is a complete, real-world inspired `base.yaml` that uses all the advanced features discussed above:
 
@@ -203,6 +229,12 @@ model_patterns:
   r1-distill-qwen-32b:
     macro: deepseek-r1-params
     variants: [short-ctx]
+
+  # Binds an mmproj file explicitly using its filename
+  gemma-4-31b:
+    macro: default-params
+    variants: [short-ctx]
+    mmproj: gemma-4-31b-mmproj-BF16.gguf
 
   qwen3-30b/instruct-2507:
     macro: default-params

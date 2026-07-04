@@ -156,6 +156,33 @@ def is_mmproj_file(path_model: Path) -> bool:
     return bool(MMPROJ_PATTERN.search(path_model.name))
 
 
+def resolve_mmproj_path(value_str: str, config_dir: Path, all_mmproj_files: list[Path]) -> Path:
+    value = Path(value_str)
+    if value.is_absolute():
+        resolved = value
+    else:
+        resolved = (config_dir / value).resolve()
+
+    if resolved.exists():
+        return resolved
+
+    candidates = []
+    norm_val = value_str.replace("\\", "/").lower()
+    for mmproj_path in all_mmproj_files:
+        norm_path = mmproj_path.as_posix().lower()
+        if mmproj_path.name.lower() == norm_val or norm_path.endswith("/" + norm_val) or norm_path.endswith(norm_val):
+            candidates.append(mmproj_path)
+
+    if len(candidates) == 1:
+        return candidates[0]
+    elif len(candidates) > 1:
+        raise ValueError(
+            f"mmproj path is ambiguous: '{value_str}'. Matches multiple files: {[str(c) for c in candidates]}"
+        )
+    else:
+        raise ValueError(f"mmproj path or file name does not exist: {value_str}")
+
+
 def select_mmproj_path_for_model(
     model_path: Path,
     model_id: str,
@@ -163,12 +190,16 @@ def select_mmproj_path_for_model(
     mmproj_overrides: dict[str, Path],
     mmproj_by_prefix: dict[str, list[Path]],
     auto_attach: bool,
+    pattern_mmproj_path: Path | None = None,
 ) -> Path | None:
-    override = (
+    if pattern_mmproj_path:
+        return pattern_mmproj_path
+
+    exact_override = (
         mmproj_overrides.get(model_id) or mmproj_overrides.get(display_name) or mmproj_overrides.get(model_path.name)
     )
-    if override:
-        return override
+    if exact_override:
+        return exact_override
 
     if not auto_attach:
         return None
@@ -391,12 +422,21 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
     ids = set()
     name_to_id: dict[str, str] = {}
     mmproj_config = config.mmproj
+
+    # Pre-scan all mmproj files across models directories for potential override resolution
+    all_mmproj_files: list[Path] = []
+    if mmproj_config.enabled:
+        for models_dir in settings.models_dirs:
+            if models_dir.exists():
+                discovered_files = set(models_dir.rglob("*.gguf")) | set(models_dir.rglob("*.GGUF"))
+                all_mmproj_files.extend([path for path in discovered_files if is_mmproj_file(path)])
+
     mmproj_overrides: dict[str, Path] = {}
     for key, value in mmproj_config.overrides.items():
-        resolved = value if value.is_absolute() else (settings.config_file.parent / value).resolve()
-        if not resolved.exists():
-            raise ValueError(f"mmproj override path does not exist for '{key}': {resolved}")
-        mmproj_overrides[key] = resolved
+        try:
+            mmproj_overrides[key] = resolve_mmproj_path(str(value), settings.config_file.parent, all_mmproj_files)
+        except ValueError as exc:
+            raise ValueError(f"mmproj override error for '{key}': {exc}") from exc
 
     metadata_cache = GGUFMetadataCache.load() if settings.vram_estimation else None
     cache_dirty = False
@@ -432,6 +472,17 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
 
             pattern_config = get_model_pattern_config(display_name, macro_config, model_id, path_model.name)
             macro_name = pattern_config.macro
+
+            pattern_mmproj_path = None
+            pattern_mmproj_val = getattr(pattern_config, "mmproj", None)
+            if pattern_mmproj_val is not None:
+                try:
+                    pattern_mmproj_path = resolve_mmproj_path(
+                        pattern_mmproj_val, settings.config_file.parent, all_mmproj_files
+                    )
+                except ValueError as exc:
+                    raise ValueError(f"mmproj resolution error in model pattern for '{display_name}': {exc}") from exc
+
             selected_mmproj_path = select_mmproj_path_for_model(
                 model_path=path_model,
                 model_id=model_id,
@@ -439,6 +490,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 mmproj_overrides=mmproj_overrides,
                 mmproj_by_prefix=mmproj_by_prefix,
                 auto_attach=mmproj_config.auto_attach,
+                pattern_mmproj_path=pattern_mmproj_path,
             )
             model_label = select_model_label(
                 config.model_labels,

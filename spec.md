@@ -117,7 +117,7 @@ startPort: <int>                     # optional, default: 9091
     - `arg` (`string`, default `--mmproj`)
     - `generate_no_mmproj_variant` (`bool`, default `false`)
     - `no_mmproj_suffix` (`string`, default `" (no mmproj)"`)
-    - `overrides` (`map[string, path]`, default `{}`)
+    - `overrides` (`map[string, path]`, default `{}`). Values can be absolute paths, relative paths from the config file directory, or simple filenames/partial paths matching any discovered mmproj files.
 
 Behavior when `enabled: true`:
 

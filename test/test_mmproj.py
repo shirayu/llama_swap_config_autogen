@@ -399,3 +399,48 @@ def test_generation_fails_when_family_and_non_family_layouts_are_mixed(tmp_path:
         assert "Unexpected mixed model directory depths" in str(exc)
     else:
         raise AssertionError("Expected generation to fail for mixed family and non-family layouts")
+
+
+def test_mmproj_via_model_pattern(tmp_path: Path):
+    models_dir = tmp_path / "models"
+
+    # Create fake-model-v1/base with models and mmproj
+    base_dir = models_dir / "Category" / "fake-model-v1" / "base"
+    base_dir.mkdir(parents=True)
+    _touch(base_dir / "fake_model_base-Q4_K_M.gguf")
+    _touch(base_dir / "fake_model_mmproj-BF16.gguf")
+
+    # Create fake-model-v1/variant with model only
+    variant_dir = models_dir / "Category" / "fake-model-v1" / "variant"
+    variant_dir.mkdir(parents=True)
+    _touch(variant_dir / "fake_model_variant-Q4_K_M.gguf")
+    _touch(variant_dir / "fake_model_variant-Q3_K_M.gguf")
+
+    config_path = tmp_path / "base.yaml"
+    _write_base_config(
+        config_path,
+        models_dir,
+        extra={
+            "model_patterns": {
+                "fake-model-v1": {
+                    "macro": "default-params",
+                    "mmproj": "fake_model_mmproj-BF16.gguf",
+                }
+            }
+        },
+    )
+
+    config = load_config(config_path)
+    settings = create_settings_from_config(config, config_path)
+    output = generate_full_config(settings, config)
+
+    # Check variant models have fake_model_mmproj-BF16 attached automatically via model_pattern
+    variant_q4_id = "fake-model-v1/variant:Q4_K_M"
+    assert variant_q4_id in output["models"]
+    assert "--mmproj" in output["models"][variant_q4_id]["cmd"]
+    assert "fake_model_mmproj-BF16.gguf" in output["models"][variant_q4_id]["cmd"]
+
+    variant_q3_id = "fake-model-v1/variant:Q3_K_M"
+    assert variant_q3_id in output["models"]
+    assert "--mmproj" in output["models"][variant_q3_id]["cmd"]
+    assert "fake_model_mmproj-BF16.gguf" in output["models"][variant_q3_id]["cmd"]

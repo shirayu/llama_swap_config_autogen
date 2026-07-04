@@ -83,7 +83,9 @@ def load_macro_config(config_file: Path) -> MacroConfig:
             for k, v in pattern_config.items():
                 if k not in {"macro", "emit_base"}:
                     norm_k = normalize_macro_name(k)
-                    if isinstance(v, str):
+                    if norm_k == "mmproj":
+                        norm_v = v
+                    elif isinstance(v, str):
                         norm_v = (
                             normalize_macro_references(v, name_map)
                             if "${" in v

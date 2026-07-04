@@ -52,6 +52,7 @@ class ModelPatternConfig(BaseModel):
     macro: str
     emit_base: bool = Field(default=True)
     variants: list[str] = Field(default_factory=list)
+    mmproj: str | None = Field(default=None)
 
 
 class MacroConfig(BaseModel):
