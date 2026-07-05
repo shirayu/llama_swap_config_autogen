@@ -88,7 +88,11 @@ startPort: <int>                     # optional, default: 9091
 - Value: Macro name, macro expression (e.g. `${a} ${b}`), or an object with:
     - `macro`: Macro name or macro expression.
     - `emit_base`: Whether to emit the unsuffixed base model entry. Defaults to `true`.
-- First matching entry is selected (in file order).
+- First matching entry is selected in file order.
+    - Matching is substring-based, not "most specific pattern wins".
+    - If both `qwen3.6-35b` and `qwen3.6-35b/a3b-mtp` are present, a model named
+      `qwen3.6-35b/a3b-mtp` matches both patterns.
+    - Put the more specific pattern first when it must override the broader parent pattern.
 - Fallback if no match: `default-params`.
 - Use `emit_base: false` when every user-facing entry for the matched model should carry an explicit variant suffix.
 
@@ -215,7 +219,8 @@ quantization suffix for model ID generation.
 4. Keep `model_patterns` responsible for base selection and whether the unsuffixed base entry is emitted.
 5. Put selectable behavior differences in `variants`.
 6. Use `emit_base: false` when suffix-less names would hide important behavior such as context length or reasoning mode.
-7. Keep pattern keys specific enough to avoid accidental matches.
+7. Order overlapping `model_patterns` from most specific to most general.
+8. Keep pattern keys specific enough to avoid accidental matches.
 
 ## 8. Minimal Example
 

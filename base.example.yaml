@@ -151,8 +151,15 @@ model_patterns:
     thinking-off-params: thinking-off-params
     variants: [cpu, short-ctx, thinking-off]
 
+  # model_patterns are selected by first substring match in file order.
+  # Keep the more specific qwen3.6-35b/a3b-mtp entry before qwen3.6-35b.
   qwen3.6-35b/a3b-mtp:
     macro: qwen-mtp-params
+    thinking-off-params: qwen-mtp-thinking-off-params
+    variants: [short-ctx, thinking-off]
+
+  qwen3.6-35b:
+    macro: default-params
     thinking-off-params: qwen-mtp-thinking-off-params
     variants: [short-ctx, thinking-off]
 
