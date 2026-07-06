@@ -160,7 +160,7 @@ model_patterns:
 
   qwen3.6-35b:
     macro: default-params
-    thinking-off-params: qwen-mtp-thinking-off-params
+    thinking-off-params: thinking-off-params
     variants: [short-ctx, thinking-off]
 
   swallow-70b/instruct:
