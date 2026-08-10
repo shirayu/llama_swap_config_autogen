@@ -167,6 +167,10 @@ model_patterns:
     macro: default-params
     variants: [short-ctx]
 
+  muse-glimmer-30b:
+    macro: default-params
+    variants: [long-context]
+
   # Coding-focused models
   qwen3-30b/coder-instruct: qwen-coder-params
   StarCoder: qwen-coder-params
@@ -183,6 +187,10 @@ variant_presets:
   short-ctx:
     - suffix: ' (short ctx)'
       macro: short-ctx-params
+
+  long-context:
+    - suffix: ' (long ctx)'
+      macro: long-context-params
 
   memory-efficient:
     - suffix: ' (Memory Efficient)'
