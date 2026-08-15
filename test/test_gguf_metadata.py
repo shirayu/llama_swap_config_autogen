@@ -726,6 +726,36 @@ class TestVramEstimationEdgeCases:
 
         assert "${gemma-params}" in result["models"]["gemma-4-12b:Q4_K_M"]["cmd"]
 
+    def test_model_patterns_can_match_glob(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "Gemma-4-12B"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
+        model_file.write_bytes(b"\x00")
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "macros": {
+                    "binary": "/app/llama-server",
+                    "default-params": "--ctx-size 32768",
+                    "qat-glob-params": "--ctx-size 16384",
+                },
+                "model_patterns": {
+                    "*gemma-4-12b*qat*": "qat-glob-params",
+                },
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        assert "${qat-glob-params}" in result["models"]["gemma-4-12b:Q4_K_XL"]["cmd"]
+
     def test_variants_can_match_generated_model_id(self, tmp_path):
         models_dir = tmp_path / "models"
         model_dir = models_dir / "Gemma-4-12B"

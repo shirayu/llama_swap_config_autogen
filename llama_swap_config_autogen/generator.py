@@ -1,5 +1,6 @@
 """YAML configuration generation logic."""
 
+import fnmatch
 import logging
 import re
 from pathlib import Path
@@ -113,6 +114,8 @@ def matches_model_pattern(pattern: str | list[str], *model_identifiers: str) -> 
     if isinstance(pattern, list):
         return any(matches_model_pattern(p, *model_identifiers) for p in pattern)
     normalized_pattern = pattern.lower()
+    if any(ch in normalized_pattern for ch in "*?["):
+        return any(fnmatch.fnmatchcase(identifier.lower(), normalized_pattern) for identifier in model_identifiers)
     return any(normalized_pattern in identifier.lower() for identifier in model_identifiers)
 
 

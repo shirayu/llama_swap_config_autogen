@@ -110,11 +110,6 @@ model_patterns:
   gpt-oss-20b: gpt-oss-20b-params
 
   # General-purpose large models
-  qwen3-30b/instruct-2507:
-    macro: qwen-context-large-params
-    cpu-params: qwen-cpu-params
-    variants: [cpu, short-ctx]
-
   gemma-3-27b:
     macro: gemma-large-params
     variants: [memory-efficient]
@@ -139,26 +134,17 @@ model_patterns:
     thinking-off-params: glm-47-thinking-off-params
     variants: [thinking-off]
 
-  qwen3-next-80b:
-    macro: qwen-context-large-params
-    cpu-params: qwen-cpu-params-big
-    thinking-off-params: thinking-off-params
-    variants: [cpu, thinking-off]
-
-  qwen3.5-35b:
-    macro: default-params
-    cpu-params: qwen-cpu-params
-    thinking-off-params: thinking-off-params
-    variants: [cpu, short-ctx, thinking-off]
-
-  # model_patterns are selected by first substring match in file order.
+  # model_patterns are selected by first match in file order.
+  # A pattern containing *, ?, or [ is treated as a glob (fnmatch) against the
+  # full model id/filename/display name (e.g. "*qwen3*-vl-*" or "gemma-4-3?b").
+  # Otherwise it falls back to a plain case-insensitive substring match.
   # Keep the more specific qwen3.6-35b/a3b-mtp entry before qwen3.6-35b.
-  qwen3.6-35b/a3b-mtp:
+  "qwen3*mtp":
     macro: qwen-mtp-params
     thinking-off-params: qwen-mtp-thinking-off-params
     variants: [short-ctx, thinking-off]
 
-  qwen3.6-35b:
+  qwen3:
     macro: default-params
     thinking-off-params: thinking-off-params
     variants: [short-ctx, thinking-off]
@@ -170,10 +156,6 @@ model_patterns:
   muse-glimmer-30b:
     macro: default-params
     variants: [long-context]
-
-  # Coding-focused models
-  qwen3-30b/coder-instruct: qwen-coder-params
-  StarCoder: qwen-coder-params
 
   # Lightweight models (for memory-constrained environments)
   Phi-3: memory-constrained-params
