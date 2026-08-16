@@ -105,3 +105,78 @@ def test_variant_uses_its_own_context_length(tmp_path: Path):
     variant_id = "qwen3-30b/standard:Q4_K_M--64k"
     assert output["models"][base_id]["capabilities"] == {"context": 32768}
     assert output["models"][variant_id]["capabilities"] == {"context": 65536}
+
+
+def test_user_specified_capabilities_merge_with_auto_derived_context(tmp_path: Path):
+    models_dir = tmp_path / "models"
+    target_dir = models_dir / "Qwen3-30B" / "standard"
+    target_dir.mkdir(parents=True)
+    _touch(target_dir / "model-Q4_K_M.gguf")
+
+    config_path = tmp_path / "base.yaml"
+    _write_base_config(
+        config_path,
+        models_dir,
+        macros={
+            "binary": "/app/llama-server",
+            "default-params": "--jinja --ctx-size 32768",
+        },
+        extra={
+            "model_patterns": {
+                "qwen3-30b": {
+                    "macro": "default-params",
+                    "capabilities": {
+                        "in": ["text", "image"],
+                        "out": ["text"],
+                        "tools": True,
+                        "reranker": False,
+                    },
+                }
+            }
+        },
+    )
+
+    config = load_config(config_path)
+    settings = create_settings_from_config(config, config_path)
+    output = generate_full_config(settings, config)
+
+    model_id = "qwen3-30b/standard:Q4_K_M"
+    assert output["models"][model_id]["capabilities"] == {
+        "in": ["text", "image"],
+        "out": ["text"],
+        "tools": True,
+        "reranker": False,
+        "context": 32768,
+    }
+
+
+def test_user_specified_context_takes_priority_over_auto_derived_context(tmp_path: Path):
+    models_dir = tmp_path / "models"
+    target_dir = models_dir / "Qwen3-30B" / "standard"
+    target_dir.mkdir(parents=True)
+    _touch(target_dir / "model-Q4_K_M.gguf")
+
+    config_path = tmp_path / "base.yaml"
+    _write_base_config(
+        config_path,
+        models_dir,
+        macros={
+            "binary": "/app/llama-server",
+            "default-params": "--jinja --ctx-size 32768",
+        },
+        extra={
+            "model_patterns": {
+                "qwen3-30b": {
+                    "macro": "default-params",
+                    "capabilities": {"context": 8192},
+                }
+            }
+        },
+    )
+
+    config = load_config(config_path)
+    settings = create_settings_from_config(config, config_path)
+    output = generate_full_config(settings, config)
+
+    model_id = "qwen3-30b/standard:Q4_K_M"
+    assert output["models"][model_id]["capabilities"] == {"context": 8192}
