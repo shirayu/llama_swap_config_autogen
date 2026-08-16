@@ -98,6 +98,10 @@ name: qwen3-30b/instruct-2507:Q4_K_M [18.8 GB]
 
 Metadata is locally cached under `~/.cache/llama_swap_config_autogen/gguf_metadata.json` and automatically invalidated when GGUF files change.
 
+### 📏 Automatic `capabilities.context`
+
+Every generated model entry gets a `capabilities.context` field set to the context length resolved from `-c`/`--ctx-size` in the expanded command (falling back to GGUF metadata when `vram_estimation: true`). This keeps llama-swap's `/v1/models` `context_length` accurate without manual configuration. The field is omitted when the context length can't be determined.
+
 ---
 
 ## Advanced Configurations (DRY Concept)
