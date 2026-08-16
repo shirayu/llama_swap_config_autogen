@@ -123,6 +123,10 @@ model_patterns:
     emit_base: false
     variants: [gemma-4-variants]
     mmproj: unsloth_gemma-4-31B-it-GGUF_mmproj-BF16.gguf
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
 
   gemma-4-:
     macro: gemma-4-32k-q8-off-params
