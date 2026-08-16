@@ -105,18 +105,41 @@ model_patterns:
     macro: deepseek-r1-params
     fast-params: ${deepseek-r1-params} ${inference-fast}
     variants: [fast, short-ctx]
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: false
 
-  gpt-oss-120b: gpt-oss-120b-params
-  gpt-oss-20b: gpt-oss-20b-params
+  gpt-oss-120b:
+    macro: gpt-oss-120b-params
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: true
+
+  gpt-oss-20b:
+    macro: gpt-oss-20b-params
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: true
 
   # General-purpose large models
   gemma-3-27b:
     macro: gemma-large-params
     variants: [memory-efficient]
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
 
   gemma-3-27b/it-qat:
     macro: gemma-large-params
     variants: [memory-efficient, short-ctx]
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
 
   gemma-4-31b:
     macro: gemma-4-32k-q8-off-params
@@ -132,11 +155,19 @@ model_patterns:
     macro: gemma-4-32k-q8-off-params
     emit_base: false
     variants: [gemma-4-variants]
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: true
 
   glm-4.7/flash:
     macro: glm-47-params
     thinking-off-params: glm-47-thinking-off-params
     variants: [thinking-off]
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: true
 
   # model_patterns are selected by first match in file order.
   # A pattern containing *, ?, or [ is treated as a glob (fnmatch) against the
@@ -147,23 +178,50 @@ model_patterns:
     macro: qwen-mtp-params
     thinking-off-params: qwen-mtp-thinking-off-params
     variants: [short-ctx, thinking-off]
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: true
 
   qwen3:
     macro: default-params
     thinking-off-params: thinking-off-params
     variants: [short-ctx, thinking-off]
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: true
 
   swallow-70b/instruct:
     macro: default-params
     variants: [short-ctx]
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: false
 
   muse-glimmer-30b:
     macro: default-params
     variants: [long-context]
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: false
 
   # Lightweight models (for memory-constrained environments)
-  Phi-3: memory-constrained-params
-  TinyLlama: memory-constrained-params
+  Phi-3:
+    macro: memory-constrained-params
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: false
+
+  TinyLlama:
+    macro: memory-constrained-params
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: false
 
 variant_presets:
   cpu:
