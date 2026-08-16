@@ -100,18 +100,20 @@ Metadata is locally cached under `~/.cache/llama_swap_config_autogen/gguf_metada
 
 ### 📏 Model Capabilities
 
-Every generated model entry gets a `capabilities.context` field set to the context length resolved from `-c`/`--ctx-size` in the expanded command (falling back to GGUF metadata when `vram_estimation: true`). This keeps llama-swap's `/v1/models` `context_length` accurate without manual configuration. The field is omitted when the context length can't be determined.
+Every generated model entry gets an auto-derived `capabilities` block, so llama-swap's `/v1/models` reflects each model's real capabilities without manual configuration:
 
-You can also declare the other `capabilities` fields (`in`, `out`, `tools`, `reranker`) per `model_patterns` entry; they're merged with the auto-derived `context` (an explicit `context` here wins over the auto-derived one):
+- `context`: resolved from `-c`/`--ctx-size` in the expanded command (falling back to GGUF metadata when `vram_estimation: true`).
+- `in`: `[text, image]` when an `mmproj` is attached to the entry, otherwise `[text]`.
+- `tools`: `true` when `vram_estimation: true` and the GGUF's chat template references tool calling; omitted otherwise.
+
+You can override any of these, and declare `out`/`reranker` (which aren't auto-derived), per `model_patterns` entry:
 
 ```yaml
 model_patterns:
   qwen3-30b:
     macro: default-params
     capabilities:
-      in: [text, image]
       out: [text]
-      tools: true
       reranker: false
 ```
 

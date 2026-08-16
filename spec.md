@@ -89,9 +89,9 @@ startPort: <int>                     # optional, default: 9091
     - `macro`: Macro name or macro expression.
     - `emit_base`: Whether to emit the unsuffixed base model entry. Defaults to `true`.
     - `capabilities`: Optional object with `in` (`list[string]`), `out` (`list[string]`), `tools` (`bool`),
-      `reranker` (`bool`), `context` (`int`). All fields are optional; only fields you set are emitted.
-      `context` set here overrides the value auto-derived from `-c`/`--ctx-size`. Applies to the base entry
-      and all variants generated from this pattern.
+      `reranker` (`bool`), `context` (`int`). All fields are optional and override the corresponding
+      auto-derived value (see Section 6) when set. Applies to the base entry and all variants generated
+      from this pattern.
 - First matching entry is selected in file order.
     - Matching is substring-based, not "most specific pattern wins".
     - If both `qwen3.6-35b` and `qwen3.6-35b/a3b-mtp` are present, a model named
@@ -214,13 +214,15 @@ quantization suffix for model ID generation.
 - `start_port` -> `startPort`
 - `default_ttl` -> each model entry `ttl`
 - `macros` -> filtered to only those referenced by generated model commands
-- `capabilities` -> per model entry, built from `model_patterns.<pattern>.capabilities` (if set) merged with an
-  auto-derived `context`:
+- `capabilities` -> per model entry, built from `model_patterns.<pattern>.capabilities` (if set) merged with
+  auto-derived fields. An explicit field in `model_patterns.<pattern>.capabilities` always takes priority over
+  its auto-derived value:
     - `context` -> the expanded command's `-c`/`--ctx-size` value (falls back to GGUF metadata `context_length`
-      when `vram_estimation: true` and no explicit `-c`/`--ctx-size` is set); an explicit `capabilities.context`
-      in `model_patterns` takes priority over the auto-derived value.
-    - `in`, `out`, `tools`, `reranker` -> emitted only when explicitly set in `model_patterns`.
-    - The whole `capabilities` block is omitted when none of its fields can be determined.
+      when `vram_estimation: true` and no explicit `-c`/`--ctx-size` is set). Omitted if neither is available.
+    - `in` -> `[text, image]` when an `mmproj` is attached to the entry, otherwise `[text]`. Always emitted.
+    - `tools` -> `true` when `vram_estimation: true` and the GGUF's `tokenizer.chat_template` metadata
+      references tool calling (`tools`/`tool_calls`); otherwise omitted unless set explicitly.
+    - `out`, `reranker` -> emitted only when explicitly set in `model_patterns` (no auto-derivation).
 
 ## 7. Recommended Authoring Rules
 

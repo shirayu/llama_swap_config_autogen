@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 CACHE_PATH = Path.home() / ".cache" / "llama_swap_config_autogen" / "gguf_metadata.json"
 ARCH_FALLBACKS = ["llama", "mistral", "phi3", "gemma", "qwen2"]
-CACHE_SCHEMA_VERSION = 3
+CACHE_SCHEMA_VERSION = 4
+TOOL_TEMPLATE_MARKERS = ("tool_calls", "tools")
 
 
 class GGUFMetadata(BaseModel):
@@ -29,6 +30,7 @@ class GGUFMetadata(BaseModel):
     feed_forward_length: int = 0
     expert_feed_forward_length: int = 0
     expert_shared_feed_forward_length: int = 0
+    supports_tools: bool = False
 
 
 class GGUFMetadataCache(BaseModel):
@@ -105,6 +107,17 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
             logger.debug("Failed to coerce GGUF field %s to int", key, exc_info=True)
             return default
 
+    def get_str(key: str) -> str:
+        field = kv.get(key)
+        if field is None:
+            return ""
+        try:
+            value = field.contents()
+            return value if isinstance(value, str) else ""
+        except Exception:
+            logger.debug("Failed to read GGUF field %s as string", key, exc_info=True)
+            return ""
+
     def discover_arch_prefixes() -> list[str]:
         prefixes: dict[str, set[str]] = {}
         for key in kv:
@@ -159,6 +172,11 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
 
     head_dim = (embedding_length // num_heads) if num_heads > 0 else 0
 
+    chat_template_keys = [key for key in kv if key.startswith("tokenizer.chat_template")]
+    supports_tools = any(
+        marker in get_str(key) for key in chat_template_keys for marker in TOOL_TEMPLATE_MARKERS
+    )
+
     metadata = GGUFMetadata(
         mtime=stat.st_mtime,
         size=stat.st_size,
@@ -173,6 +191,7 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         feed_forward_length=feed_forward_length,
         expert_feed_forward_length=expert_feed_forward_length,
         expert_shared_feed_forward_length=expert_shared_feed_forward_length,
+        supports_tools=supports_tools,
     )
 
     logger.debug(
