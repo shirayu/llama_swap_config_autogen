@@ -33,7 +33,7 @@ model_patterns:
     variants: [cpu]
 ```
 
-**The magic:** Scans directories → finds all GGUF models → applies template-based rules → outputs complete, ready-to-run llama-swap configs.
+**The magic:** Scans directories → finds all GGUF models → applies template-based rules → outputs complete, ready-to-run llama-swap configs, each with an accurate `capabilities` block (context length, vision input, tool calling) auto-derived from your commands and the GGUF files themselves — no manual bookkeeping.
 
 ---
 
@@ -105,6 +105,20 @@ Every generated model entry gets an auto-derived `capabilities` block, so llama-
 - `context`: resolved from `-c`/`--ctx-size` in the expanded command (falling back to GGUF metadata when `vram_estimation: true`).
 - `in`: `[text, image]` when an `mmproj` is attached to the entry, otherwise `[text]`.
 - `tools`: `true` when `vram_estimation: true` and the GGUF's chat template references tool calling; omitted otherwise.
+
+This lands directly in `config.yaml`, so clients like Open WebUI show accurate context limits and correctly gate vision/tool-calling UI per model — no hand-maintained metadata to keep in sync:
+
+```yaml
+# Generated config.yaml
+models:
+  "qwen3-30b/instruct-2507:Q4_K_M":
+    cmd: ...
+    name: "qwen3-30b/instruct-2507:Q4_K_M"
+    capabilities:
+      context: 32768
+      in: [text]
+      tools: true
+```
 
 You can override any of these, and declare `out`/`reranker` (which aren't auto-derived), per `model_patterns` entry:
 
