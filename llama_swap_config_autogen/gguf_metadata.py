@@ -173,9 +173,7 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
     head_dim = (embedding_length // num_heads) if num_heads > 0 else 0
 
     chat_template_keys = [key for key in kv if key.startswith("tokenizer.chat_template")]
-    supports_tools = any(
-        marker in get_str(key) for key in chat_template_keys for marker in TOOL_TEMPLATE_MARKERS
-    )
+    supports_tools = any(marker in get_str(key) for key in chat_template_keys for marker in TOOL_TEMPLATE_MARKERS)
 
     metadata = GGUFMetadata(
         mtime=stat.st_mtime,
