@@ -100,7 +100,7 @@ Metadata is locally cached under `~/.cache/llama_swap_config_autogen/gguf_metada
 
 ### 📏 Model Capabilities
 
-llama-swap supports a [`capabilities`](https://github.com/mostlygeek/llama-swap/blob/main/config.example.yaml) block per model (`context`, `in`, `out`, `tools`, `reranker`) that it exposes via `/v1/models`, but this generator used to leave it out entirely — clients had no reliable way to know a model's real context length, modality, or tool-calling support. Every generated model entry now gets an auto-derived `capabilities` block, so llama-swap's `/v1/models` reflects each model's real capabilities without manual configuration:
+llama-swap supports a [`capabilities`](https://github.com/mostlygeek/llama-swap/blob/main/config.example.yaml) block per model (`context`, `in`, `out`, `tools`, `reranker`) that it exposes via `/v1/models`, but this generator used to leave it out entirely — clients had no reliable way to know a model's real context length, modality, or tool-calling support (see [mostlygeek/llama-swap#999](https://github.com/mostlygeek/llama-swap/issues/999) for a client-side symptom of this same gap). Every generated model entry now gets an auto-derived `capabilities` block, so llama-swap's `/v1/models` reflects each model's real capabilities without manual configuration:
 
 - `context`: resolved from `-c`/`--ctx-size` in the expanded command (falling back to GGUF metadata when `vram_estimation: true`).
 - `in`: `[text, image]` when an `mmproj` is attached to the entry, otherwise `[text]`.
