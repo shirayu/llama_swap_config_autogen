@@ -82,10 +82,17 @@ def multiline_literal_representer(dumper: yaml.Dumper, data: MultilineLiteral) -
 yaml.add_representer(MultilineLiteral, multiline_literal_representer)
 
 
+class CapabilitiesConfig(BaseModel):
+    context: int = Field(description="Maximum token context length supported by the model")
+
+
 class YamlModelConfig(BaseModel):
     ttl: int = Field(description="Time to live for the model in seconds")
     cmd: MultilineLiteral = Field(description="Command to run the model")
     name: str = Field(description="Display name for the model")
+    capabilities: CapabilitiesConfig | None = Field(
+        default=None, description="Model capabilities such as context length"
+    )
 
     model_config = {"arbitrary_types_allowed": True}
 

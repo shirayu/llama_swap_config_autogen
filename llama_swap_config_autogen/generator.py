@@ -8,6 +8,7 @@ from pathlib import Path
 from .config import load_macro_config
 from .gguf_metadata import GGUFMetadataCache, estimate_vram_gb, get_gguf_metadata
 from .models import (
+    CapabilitiesConfig,
     Config,
     MacroConfig,
     ModelLabelsConfig,
@@ -404,6 +405,34 @@ def build_vram_label(
         return None
 
 
+def build_context_capability(
+    macro_expr: str,
+    macro_config: MacroConfig,
+    path_model: Path,
+    metadata_cache: GGUFMetadataCache | None,
+) -> CapabilitiesConfig | None:
+    """Determine capabilities.context from an expanded macro's -c/--ctx-size, falling back to GGUF metadata."""
+    expanded_cmd = expand_macro_expression(macro_expr, macro_config.macros)
+    match = CONTEXT_PATTERN.search(expanded_cmd)
+    if match:
+        ctx = int(match.group(1))
+        if ctx > 0:
+            return CapabilitiesConfig(context=ctx)
+
+    if metadata_cache is None:
+        return None
+
+    try:
+        metadata = get_gguf_metadata(path_model, metadata_cache)
+    except Exception as e:
+        logger.warning("Could not read GGUF metadata for %s: %s", path_model.name, e)
+        return None
+
+    if metadata.context_length > 0:
+        return CapabilitiesConfig(context=metadata.context_length)
+    return None
+
+
 def resolve_variant_macro_template(template: str, pattern_config: ModelPatternConfig) -> str:
     """Resolve placeholders like ${cpu-macro} in a variant macro template using pattern_config's extra fields."""
     import re
@@ -526,9 +555,12 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     if len(metadata_cache.entries) != before_count:
                         cache_dirty = True
                 full_name = format_model_name(model_name, vram_label, model_label)
+                base_capabilities = build_context_capability(macro_name, macro_config, path_model, metadata_cache)
 
                 ensure_unique_model_name(full_name, model_id, name_to_id)
-                models[model_id] = YamlModelConfig(ttl=settings.default_ttl, cmd=cmd, name=full_name)
+                models[model_id] = YamlModelConfig(
+                    ttl=settings.default_ttl, cmd=cmd, name=full_name, capabilities=base_capabilities
+                )
                 if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
                     no_mmproj_id = f"{model_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
                     no_mmproj_cmd = format_command_with_macro(str(path_model), macro_name)
@@ -546,6 +578,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         ttl=settings.default_ttl,
                         cmd=no_mmproj_cmd,
                         name=no_mmproj_name,
+                        capabilities=base_capabilities,
                     )
 
             # Generate preset-based variant models
@@ -585,9 +618,15 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 if len(metadata_cache.entries) != before_count:
                                     cache_dirty = True
                             variant_full_name = format_model_name(variant_display_name, variant_vram_label, model_label)
+                            variant_capabilities = build_context_capability(
+                                variant_macro, macro_config, path_model, metadata_cache
+                            )
                             ensure_unique_model_name(variant_full_name, variant_id, name_to_id)
                             models[variant_id] = YamlModelConfig(
-                                ttl=settings.default_ttl, cmd=variant_cmd, name=variant_full_name
+                                ttl=settings.default_ttl,
+                                cmd=variant_cmd,
+                                name=variant_full_name,
+                                capabilities=variant_capabilities,
                             )
                         if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
                             no_mmproj_variant_id = (
@@ -614,11 +653,15 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 else:
                                     base_variant_name = variant_display_name
                                 no_mmproj_variant_name = f"{base_variant_name}{mmproj_config.no_mmproj_suffix}"
+                                no_mmproj_variant_capabilities = build_context_capability(
+                                    variant_macro, macro_config, path_model, metadata_cache
+                                )
                                 ensure_unique_model_name(no_mmproj_variant_name, no_mmproj_variant_id, name_to_id)
                                 models[no_mmproj_variant_id] = YamlModelConfig(
                                     ttl=settings.default_ttl,
                                     cmd=no_mmproj_variant_cmd,
                                     name=no_mmproj_variant_name,
+                                    capabilities=no_mmproj_variant_capabilities,
                                 )
 
             # Generate variant models
@@ -658,9 +701,15 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             if len(metadata_cache.entries) != before_count:
                                 cache_dirty = True
                         variant_full_name = format_model_name(variant_display_name, variant_vram_label, model_label)
+                        variant_capabilities = build_context_capability(
+                            variant_macro, macro_config, path_model, metadata_cache
+                        )
                         ensure_unique_model_name(variant_full_name, variant_id, name_to_id)
                         models[variant_id] = YamlModelConfig(
-                            ttl=settings.default_ttl, cmd=variant_cmd, name=variant_full_name
+                            ttl=settings.default_ttl,
+                            cmd=variant_cmd,
+                            name=variant_full_name,
+                            capabilities=variant_capabilities,
                         )
                     if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
                         no_mmproj_variant_id = f"{variant_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
@@ -685,11 +734,15 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             else:
                                 base_variant_name = variant_display_name
                             no_mmproj_variant_name = f"{base_variant_name}{mmproj_config.no_mmproj_suffix}"
+                            no_mmproj_variant_capabilities = build_context_capability(
+                                variant_macro, macro_config, path_model, metadata_cache
+                            )
                             ensure_unique_model_name(no_mmproj_variant_name, no_mmproj_variant_id, name_to_id)
                             models[no_mmproj_variant_id] = YamlModelConfig(
                                 ttl=settings.default_ttl,
                                 cmd=no_mmproj_variant_cmd,
                                 name=no_mmproj_variant_name,
+                                capabilities=no_mmproj_variant_capabilities,
                             )
 
     if cache_dirty and metadata_cache is not None:
@@ -850,6 +903,8 @@ def generate_full_config(settings: Settings, config: Config) -> dict:
             "cmd": model_config.cmd,
             "name": model_config.name,
         }
+        if model_config.capabilities is not None:
+            output_config["models"][model_id]["capabilities"] = {"context": model_config.capabilities.context}
         # Collect commands as strings
         cmd_str = str(model_config.cmd)
         all_commands.append(cmd_str)

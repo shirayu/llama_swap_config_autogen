@@ -210,6 +210,9 @@ quantization suffix for model ID generation.
 - `start_port` -> `startPort`
 - `default_ttl` -> each model entry `ttl`
 - `macros` -> filtered to only those referenced by generated model commands
+- `capabilities.context` -> auto-derived per model entry from the expanded command's `-c`/`--ctx-size` value
+  (falls back to GGUF metadata `context_length` when `vram_estimation: true` and no explicit `-c`/`--ctx-size` is set).
+  Omitted entirely when the context length cannot be determined.
 
 ## 7. Recommended Authoring Rules
 
