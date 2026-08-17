@@ -152,4 +152,5 @@ def create_settings_from_config(config: Config, config_file: Path) -> Settings:
         default_ttl=config.default_ttl,
         config_file=config_file,
         vram_estimation=config.vram_estimation,
+        read_gguf_metadata=config.vram_estimation or config.read_gguf_metadata,
     )

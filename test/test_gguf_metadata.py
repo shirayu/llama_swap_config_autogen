@@ -42,6 +42,7 @@ def _make_metadata(
     feed_forward_length: int = 0,
     expert_feed_forward_length: int = 0,
     expert_shared_feed_forward_length: int = 0,
+    supports_reasoning: bool = False,
 ) -> GGUFMetadata:
     return GGUFMetadata(
         mtime=mtime,
@@ -57,6 +58,7 @@ def _make_metadata(
         feed_forward_length=feed_forward_length,
         expert_feed_forward_length=expert_feed_forward_length,
         expert_shared_feed_forward_length=expert_shared_feed_forward_length,
+        supports_reasoning=supports_reasoning,
     )
 
 
@@ -278,6 +280,63 @@ class TestReadGgufMetadata:
         assert meta.context_length == 131072
         assert meta.head_dim == 128
 
+    def test_detects_reasoning_support_from_chat_template(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00")
+
+        class FakeField:
+            def __init__(self, name, value):
+                self.name = name
+                self._value = value
+
+            def contents(self, index_or_slice=0):
+                return self._value
+
+        fake_fields = {
+            "qwen2.block_count": FakeField("qwen2.block_count", [32]),
+            "qwen2.attention.head_count": FakeField("qwen2.attention.head_count", [32]),
+            "qwen2.attention.head_count_kv": FakeField("qwen2.attention.head_count_kv", [8]),
+            "qwen2.embedding_length": FakeField("qwen2.embedding_length", [4096]),
+            "qwen2.context_length": FakeField("qwen2.context_length", [131072]),
+            "tokenizer.chat_template": FakeField(
+                "tokenizer.chat_template",
+                "{% if enable_thinking is defined and enable_thinking is false %}{% endif %}",
+            ),
+        }
+        fake_reader = SimpleNamespace(fields=fake_fields)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta = _read_gguf_metadata(model)
+
+        assert meta.supports_reasoning is True
+
+    def test_reasoning_support_false_without_marker(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00")
+
+        class FakeField:
+            def __init__(self, name, value):
+                self.name = name
+                self._value = value
+
+            def contents(self, index_or_slice=0):
+                return self._value
+
+        fake_fields = {
+            "qwen2.block_count": FakeField("qwen2.block_count", [32]),
+            "qwen2.attention.head_count": FakeField("qwen2.attention.head_count", [32]),
+            "qwen2.attention.head_count_kv": FakeField("qwen2.attention.head_count_kv", [8]),
+            "qwen2.embedding_length": FakeField("qwen2.embedding_length", [4096]),
+            "qwen2.context_length": FakeField("qwen2.context_length", [131072]),
+            "tokenizer.chat_template": FakeField("tokenizer.chat_template", "{{ messages }}"),
+        }
+        fake_reader = SimpleNamespace(fields=fake_fields)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta = _read_gguf_metadata(model)
+
+        assert meta.supports_reasoning is False
+
     def test_discovers_non_fallback_arch_prefix(self, tmp_path):
         model = tmp_path / "model.gguf"
         model.write_bytes(b"\x00")
@@ -460,6 +519,201 @@ class TestVramMetadataInGeneratedConfig:
     def _fake_get_metadata(self, path: Path, cache: GGUFMetadataCache) -> GGUFMetadata:
         stat = path.stat()
         return _make_metadata(mtime=stat.st_mtime, size=stat.st_size)
+
+    def test_model_metadata_includes_reasoning_off_from_command(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "qwen3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "qwen3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "macros": {
+                    "binary": "/app/llama-server",
+                    "default-params": "-ngl 99 --ctx-size 4096 --reasoning off",
+                }
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        model = result["models"]["qwen3:Q4_K_M"]
+        assert model["metadata"]["reasoning"] == "off"
+
+    def test_model_metadata_omits_reasoning_without_flag(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "qwen3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "qwen3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, models_dir, vram_estimation=False)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        model = result["models"]["qwen3:Q4_K_M"]
+        assert "reasoning" not in model["metadata"]
+
+    def test_model_metadata_does_not_flag_reasoning_format_flag(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "qwen3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "qwen3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "macros": {
+                    "binary": "/app/llama-server",
+                    "default-params": "-ngl 99 --ctx-size 4096 --reasoning-format none",
+                }
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        model = result["models"]["qwen3:Q4_K_M"]
+        assert "reasoning" not in model["metadata"]
+
+    def test_model_metadata_includes_reasoning_off_via_variant(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "qwen3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "qwen3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={
+                "variants": [
+                    {
+                        "base_pattern": "qwen3",
+                        "suffix": " (thinking off)",
+                        "macro": "${default-params} --reasoning off",
+                    }
+                ]
+            },
+        )
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        base_model = result["models"]["qwen3:Q4_K_M"]
+        variant_model = result["models"]["qwen3:Q4_K_M--thinking-off"]
+        assert "reasoning" not in base_model["metadata"]
+        assert variant_model["metadata"]["reasoning"] == "off"
+
+    def test_model_metadata_includes_reasoning_supported_from_gguf(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "qwen3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "qwen3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, models_dir, vram_estimation=True)
+
+        def fake_get_metadata(path, cache):
+            stat = path.stat()
+            return _make_metadata(mtime=stat.st_mtime, size=stat.st_size, supports_reasoning=True)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=fake_get_metadata):
+            result = generate_full_config(settings, config)
+
+        model = result["models"]["qwen3:Q4_K_M"]
+        assert model["metadata"]["reasoning_supported"] is True
+
+    def test_model_metadata_includes_reasoning_supported_false_from_gguf(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "llama3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "llama3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, models_dir, vram_estimation=True)
+
+        def fake_get_metadata(path, cache):
+            stat = path.stat()
+            return _make_metadata(mtime=stat.st_mtime, size=stat.st_size, supports_reasoning=False)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=fake_get_metadata):
+            result = generate_full_config(settings, config)
+
+        model = result["models"]["llama3:Q4_K_M"]
+        assert model["metadata"]["reasoning_supported"] is False
+
+    def test_model_metadata_omits_reasoning_supported_when_vram_estimation_disabled(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "qwen3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "qwen3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, models_dir, vram_estimation=False)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+        result = generate_full_config(settings, config)
+
+        model = result["models"]["qwen3:Q4_K_M"]
+        assert "reasoning_supported" not in model["metadata"]
+
+    def test_read_gguf_metadata_enables_reasoning_supported_without_vram_estimation(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "qwen3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "qwen3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            models_dir,
+            vram_estimation=False,
+            extra={"read_gguf_metadata": True},
+        )
+
+        def fake_get_metadata(path, cache):
+            stat = path.stat()
+            return _make_metadata(mtime=stat.st_mtime, size=stat.st_size, supports_reasoning=True)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=fake_get_metadata):
+            result = generate_full_config(settings, config)
+
+        model = result["models"]["qwen3:Q4_K_M"]
+        assert model["metadata"]["reasoning_supported"] is True
+        assert "model_size_gib" not in model["metadata"]
 
     def test_model_metadata_includes_vram_estimate(self, tmp_path):
         models_dir = tmp_path / "models"

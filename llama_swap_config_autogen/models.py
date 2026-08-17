@@ -40,6 +40,11 @@ class Config(BaseModel):
     mmproj: MmprojConfig = Field(default_factory=MmprojConfig)
     default_ttl: int = Field(default=300)
     vram_estimation: bool = Field(default=False)
+    read_gguf_metadata: bool = Field(
+        default=False,
+        description="Read GGUF chat_template/architecture headers to auto-derive capabilities "
+        "(tools, reasoning_supported) even when vram_estimation is disabled.",
+    )
 
 
 class VariantPresetItem(BaseModel):
@@ -69,6 +74,7 @@ class Settings(BaseModel):
     default_ttl: int = Field(default=300)
     config_file: Path
     vram_estimation: bool = Field(default=False)
+    read_gguf_metadata: bool = Field(default=False)
 
 
 class MultilineLiteral(str):

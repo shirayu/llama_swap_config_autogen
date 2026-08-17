@@ -30,6 +30,7 @@ CACHE_TYPE_K_PATTERN = re.compile(r"--cache-type-k\s+([^\s]+)")
 CACHE_TYPE_V_PATTERN = re.compile(r"--cache-type-v\s+([^\s]+)")
 CPU_OFFLOAD_PATTERN = re.compile(r"(?:--cpu-moe|--n-cpu-moe\b|-ot\b[^\n]*=CPU)", re.IGNORECASE)
 N_CPU_MOE_PATTERN = re.compile(r"--n-cpu-moe\s+(\d+)")
+REASONING_OFF_PATTERN = re.compile(r"--reasoning\s+off\b", re.IGNORECASE)
 
 
 def extract_quantization_suffix(filename: str) -> str:
@@ -408,22 +409,29 @@ def build_model_metadata(
     expanded_cmd: str,
     metadata_cache: GGUFMetadataCache | None,
     mmproj_path: Path | None = None,
-) -> tuple[dict[str, str | float], bool]:
+    vram_estimation: bool = True,
+) -> tuple[dict[str, str | float | bool], bool]:
     """Build model metadata and report whether the GGUF cache changed.
 
     llama-swap wraps this config-level metadata under ``meta.llamaswap`` in
     its /v1/models response, so this function must return the inner mapping.
     """
-    model_metadata: dict[str, str | float] = {
+    model_metadata: dict[str, str | float | bool] = {
         "model_family": display_name.split("/", 1)[0],
     }
+    if REASONING_OFF_PATTERN.search(expanded_cmd):
+        model_metadata["reasoning"] = "off"
     cache_changed = False
     if metadata_cache is not None:
         before_count = len(metadata_cache.entries)
-        vram_gib = estimate_vram_gib(path_model, expanded_cmd, 0, metadata_cache, mmproj_path=mmproj_path)
+        if vram_estimation:
+            vram_gib = estimate_vram_gib(path_model, expanded_cmd, 0, metadata_cache, mmproj_path=mmproj_path)
+            if vram_gib is not None:
+                model_metadata["model_size_gib"] = round(vram_gib, 1)
+        reasoning_supported = resolve_reasoning_support(path_model, metadata_cache)
+        if reasoning_supported is not None:
+            model_metadata["reasoning_supported"] = reasoning_supported
         cache_changed = len(metadata_cache.entries) != before_count
-        if vram_gib is not None:
-            model_metadata["model_size_gib"] = round(vram_gib, 1)
     return model_metadata, cache_changed
 
 
@@ -457,7 +465,10 @@ def resolve_tool_support(
     path_model: Path,
     metadata_cache: GGUFMetadataCache | None,
 ) -> bool | None:
-    """Detect tool-calling support from the GGUF chat_template. Requires vram_estimation to read GGUF metadata."""
+    """Detect tool-calling support from the GGUF chat_template.
+
+    Requires vram_estimation or read_gguf_metadata to read GGUF metadata.
+    """
     if metadata_cache is None:
         return None
 
@@ -468,6 +479,26 @@ def resolve_tool_support(
         return None
 
     return metadata.supports_tools or None
+
+
+def resolve_reasoning_support(
+    path_model: Path,
+    metadata_cache: GGUFMetadataCache | None,
+) -> bool | None:
+    """Detect reasoning/thinking support from the GGUF chat_template.
+
+    Requires vram_estimation or read_gguf_metadata to read GGUF metadata.
+    """
+    if metadata_cache is None:
+        return None
+
+    try:
+        metadata = get_gguf_metadata(path_model, metadata_cache)
+    except Exception as e:
+        logger.warning("Could not read GGUF metadata for %s: %s", path_model.name, e)
+        return None
+
+    return metadata.supports_reasoning
 
 
 def build_capabilities(
@@ -535,7 +566,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
         except ValueError as exc:
             raise ValueError(f"mmproj override error for '{key}': {exc}") from exc
 
-    metadata_cache = GGUFMetadataCache.load() if settings.vram_estimation else None
+    metadata_cache = GGUFMetadataCache.load() if settings.read_gguf_metadata else None
     cache_dirty = False
 
     for models_dir in settings.models_dirs:
@@ -604,6 +635,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     expanded_cmd,
                     metadata_cache,
                     mmproj_path=selected_mmproj_path,
+                    vram_estimation=settings.vram_estimation,
                 )
                 if metadata_changed:
                     cache_dirty = True
@@ -633,6 +665,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         path_model,
                         expanded_cmd,
                         metadata_cache,
+                        vram_estimation=settings.vram_estimation,
                     )
                     if metadata_changed:
                         cache_dirty = True
@@ -684,6 +717,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 expanded_variant_cmd,
                                 metadata_cache,
                                 mmproj_path=selected_mmproj_path,
+                                vram_estimation=settings.vram_estimation,
                             )
                             if metadata_changed:
                                 cache_dirty = True
@@ -715,6 +749,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                     path_model,
                                     expanded_variant_cmd,
                                     metadata_cache,
+                                    vram_estimation=settings.vram_estimation,
                                 )
                                 if metadata_changed:
                                     cache_dirty = True
@@ -766,6 +801,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             expanded_variant_cmd,
                             metadata_cache,
                             mmproj_path=selected_mmproj_path,
+                            vram_estimation=settings.vram_estimation,
                         )
                         if metadata_changed:
                             cache_dirty = True
@@ -795,6 +831,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 path_model,
                                 expanded_variant_cmd,
                                 metadata_cache,
+                                vram_estimation=settings.vram_estimation,
                             )
                             if metadata_changed:
                                 cache_dirty = True
@@ -963,7 +1000,7 @@ def generate_full_config(settings: Settings, config: Config) -> dict:
     # (like captureBuffer, healthCheckTimeout, logLevel, startPort) from config.model_extra
     if config.model_extra:
         for k, v in config.model_extra.items():
-            if k not in {"vram_estimation", "model_labels"}:
+            if k not in {"vram_estimation", "read_gguf_metadata", "model_labels"}:
                 output_config[k] = v
 
     # Add model configurations and collect commands simultaneously

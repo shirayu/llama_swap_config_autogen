@@ -101,13 +101,29 @@ metadata:
 
 Metadata is locally cached under `~/.cache/llama_swap_config_autogen/gguf_metadata.json` and automatically invalidated when GGUF files change.
 
+Two more fields are auto-derived into `metadata`, so "thinking off" no longer has to be encoded only in a display-name suffix:
+
+- `reasoning: "off"`: added whenever the expanded launch command contains `--reasoning off` (e.g. a `thinking-off` variant). Detected purely from the command string, so it works even with `vram_estimation: false`.
+- `reasoning_supported`: `true`/`false` reflecting whether the GGUF's chat template indicates the model architecture supports reasoning/thinking mode at all (independent of whether a given variant launches with it off). Unlike `tools` (below), this is always emitted (not omitted on `false`) whenever GGUF headers are read — set `vram_estimation: true`, or set `read_gguf_metadata: true` if you want this detection without paying for VRAM estimation.
+
+```text
+name: qwen3-30b/instruct-2507:Q4_K_M (thinking off)
+metadata:
+  model_family: qwen3-30b
+  model_size_gib: 18.8
+  reasoning: "off"
+  reasoning_supported: true
+```
+
 ### 📏 Model Capabilities
 
 llama-swap supports a [`capabilities`](https://github.com/mostlygeek/llama-swap/blob/main/config.example.yaml) block per model (`context`, `in`, `out`, `tools`, `reranker`) that it exposes via `/v1/models`, but this generator used to leave it out entirely — clients had no reliable way to know a model's real context length, modality, or tool-calling support (see [mostlygeek/llama-swap#999](https://github.com/mostlygeek/llama-swap/issues/999) for a client-side symptom of this same gap). Every generated model entry now gets an auto-derived `capabilities` block, so llama-swap's `/v1/models` reflects each model's real capabilities without manual configuration:
 
-- `context`: resolved from `-c`/`--ctx-size` in the expanded command (falling back to GGUF metadata when `vram_estimation: true`).
+- `context`: resolved from `-c`/`--ctx-size` in the expanded command (falling back to GGUF metadata when `vram_estimation: true` or `read_gguf_metadata: true`).
 - `in`: `[text, image]` when an `mmproj` is attached to the entry, otherwise `[text]`.
-- `tools`: `true` when `vram_estimation: true` and the GGUF's chat template references tool calling; omitted otherwise.
+- `tools`: `true` when `vram_estimation: true` or `read_gguf_metadata: true` and the GGUF's chat template references tool calling; omitted otherwise.
+
+Set `read_gguf_metadata: true` if you want GGUF-header-derived fields (`tools`, `metadata.reasoning_supported`, context fallback) without also paying for VRAM estimation — `vram_estimation: true` implies it.
 
 This lands directly in `config.yaml`, so clients like Open WebUI show accurate context limits and correctly gate vision/tool-calling UI per model — no hand-maintained metadata to keep in sync:
 

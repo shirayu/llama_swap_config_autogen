@@ -12,8 +12,9 @@ logger = logging.getLogger(__name__)
 
 CACHE_PATH = Path.home() / ".cache" / "llama_swap_config_autogen" / "gguf_metadata.json"
 ARCH_FALLBACKS = ["llama", "mistral", "phi3", "gemma", "qwen2"]
-CACHE_SCHEMA_VERSION = 4
+CACHE_SCHEMA_VERSION = 5
 TOOL_TEMPLATE_MARKERS = ("tool_calls", "tools")
+REASONING_TEMPLATE_MARKERS = ("enable_thinking", "reasoning_content")
 
 
 class GGUFMetadata(BaseModel):
@@ -31,6 +32,7 @@ class GGUFMetadata(BaseModel):
     expert_feed_forward_length: int = 0
     expert_shared_feed_forward_length: int = 0
     supports_tools: bool = False
+    supports_reasoning: bool = False
 
 
 class GGUFMetadataCache(BaseModel):
@@ -174,6 +176,9 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
 
     chat_template_keys = [key for key in kv if key.startswith("tokenizer.chat_template")]
     supports_tools = any(marker in get_str(key) for key in chat_template_keys for marker in TOOL_TEMPLATE_MARKERS)
+    supports_reasoning = any(
+        marker in get_str(key) for key in chat_template_keys for marker in REASONING_TEMPLATE_MARKERS
+    )
 
     metadata = GGUFMetadata(
         mtime=stat.st_mtime,
@@ -190,6 +195,7 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         expert_feed_forward_length=expert_feed_forward_length,
         expert_shared_feed_forward_length=expert_shared_feed_forward_length,
         supports_tools=supports_tools,
+        supports_reasoning=supports_reasoning,
     )
 
     logger.debug(
