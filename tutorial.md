@@ -9,9 +9,8 @@ This tutorial guides you through the advanced configuration features of `llama-s
 1. [The Basic Concept: Auto-Discovery](#1-the-basic-concept-auto-discovery)
 2. [Parameterized Macros: Eliminating Numeric Duplications](#2-parameterized-macros-eliminating-numeric-duplications)
 3. [Variant Presets with Implicit Argument Binding](#3-variant-presets-with-implicit-argument-binding)
-4. [Model Labels with Multi-Pattern Lists](#4-model-labels-with-multi-pattern-lists)
-5. [Explicit Multi-Modal Projection (mmproj) Binding](#5-explicit-multi-modal-projection-mmproj-binding)
-6. [Put It All Together: A Complete base.yaml Example](#6-put-it-all-together-a-complete-baseyaml-example)
+4. [Explicit Multi-Modal Projection (mmproj) Binding](#4-explicit-multi-modal-projection-mmproj-binding)
+5. [Put It All Together: A Complete base.yaml Example](#5-put-it-all-together-a-complete-baseyaml-example)
 
 ---
 
@@ -143,7 +142,7 @@ Using this pattern matches the target model family prefix (`gemma-4-31b`) and re
 
 ---
 
-## 6. Put It All Together: A Complete base.yaml Example
+## 5. Put It All Together: A Complete base.yaml Example
 
 Here is a complete, real-world inspired `base.yaml` that uses all the advanced features discussed above:
 
