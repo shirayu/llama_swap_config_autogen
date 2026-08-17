@@ -479,8 +479,8 @@ class TestVramMetadataInGeneratedConfig:
 
         model = result["models"]["llama3:Q4_K_M"]
         assert model["name"] == "llama3:Q4_K_M"
-        assert model["metadata"]["llamaswap"]["model_family"] == "llama3"
-        assert isinstance(model["metadata"]["llamaswap"]["model_size_gib"], float)
+        assert model["metadata"]["model_family"] == "llama3"
+        assert isinstance(model["metadata"]["model_size_gib"], float)
 
     def test_model_metadata_omits_vram_when_disabled(self, tmp_path):
         models_dir = tmp_path / "models"
@@ -499,7 +499,7 @@ class TestVramMetadataInGeneratedConfig:
 
         model = result["models"]["llama3:Q4_K_M"]
         assert model["name"] == "llama3:Q4_K_M"
-        assert model["metadata"]["llamaswap"] == {"model_family": "llama3"}
+        assert model["metadata"] == {"model_family": "llama3"}
 
     def test_model_metadata_omits_vram_on_read_error(self, tmp_path):
         models_dir = tmp_path / "models"
@@ -522,7 +522,7 @@ class TestVramMetadataInGeneratedConfig:
 
         model = result["models"]["llama3:Q4_K_M"]
         assert model["name"] == "llama3:Q4_K_M"
-        assert model["metadata"]["llamaswap"] == {"model_family": "llama3"}
+        assert model["metadata"] == {"model_family": "llama3"}
 
     def test_cache_is_saved_after_new_entry(self, tmp_path):
         models_dir = tmp_path / "models"
@@ -587,7 +587,7 @@ class TestVramMetadataInGeneratedConfig:
 
         fast_models = [v for model_id, v in result["models"].items() if model_id.endswith("-fast")]
         assert fast_models, "Fast variant was not generated"
-        assert all("model_size_gib" in v["metadata"]["llamaswap"] for v in fast_models)
+        assert all("model_size_gib" in v["metadata"] for v in fast_models)
         assert all("[" not in v["name"] for v in fast_models)
 
 
@@ -635,8 +635,8 @@ class TestVramEstimationEdgeCases:
         with patch("llama_swap_config_autogen.generator.get_gguf_metadata", return_value=meta):
             result = generate_full_config(settings, config)
 
-        with_mmproj = result["models"]["gemma:Q4_K_M"]["metadata"]["llamaswap"]["model_size_gib"]
-        no_mmproj = result["models"]["gemma:Q4_K_M--no-mmproj"]["metadata"]["llamaswap"]["model_size_gib"]
+        with_mmproj = result["models"]["gemma:Q4_K_M"]["metadata"]["model_size_gib"]
+        no_mmproj = result["models"]["gemma:Q4_K_M--no-mmproj"]["metadata"]["model_size_gib"]
 
         assert with_mmproj != no_mmproj
 

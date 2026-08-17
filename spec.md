@@ -198,8 +198,10 @@ quantization suffix for model ID generation.
     - `tools` -> `true` when `vram_estimation: true` and the GGUF's `tokenizer.chat_template` metadata
       references tool calling (`tools`/`tool_calls`); otherwise omitted unless set explicitly.
     - `out`, `reranker` -> emitted only when explicitly set in `model_patterns` (no auto-derivation).
-- `metadata.llamaswap.model_family` -> the first segment of the generated display name.
-- `metadata.llamaswap.model_size_gib` -> the numeric VRAM estimate when `vram_estimation: true`; omitted when
+- `metadata.model_family` -> the first segment of the generated display name. llama-swap exposes it under
+  `meta.llamaswap.model_family` in `/v1/models`.
+- `metadata.model_size_gib` -> the numeric VRAM estimate when `vram_estimation: true`; llama-swap exposes it under
+  `meta.llamaswap.model_size_gib` in `/v1/models`. It is omitted when
   estimation is disabled or fails.
 
 Audio models should declare their modalities explicitly in `model_patterns`, for example `in: [audio]` for speech

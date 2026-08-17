@@ -408,9 +408,13 @@ def build_model_metadata(
     expanded_cmd: str,
     metadata_cache: GGUFMetadataCache | None,
     mmproj_path: Path | None = None,
-) -> tuple[dict[str, dict[str, str | float]], bool]:
-    """Build llama-swap metadata and report whether the GGUF cache changed."""
-    llamaswap_metadata: dict[str, str | float] = {
+) -> tuple[dict[str, str | float], bool]:
+    """Build model metadata and report whether the GGUF cache changed.
+
+    llama-swap wraps this config-level metadata under ``meta.llamaswap`` in
+    its /v1/models response, so this function must return the inner mapping.
+    """
+    model_metadata: dict[str, str | float] = {
         "model_family": display_name.split("/", 1)[0],
     }
     cache_changed = False
@@ -419,8 +423,8 @@ def build_model_metadata(
         vram_gib = estimate_vram_gib(path_model, expanded_cmd, 0, metadata_cache, mmproj_path=mmproj_path)
         cache_changed = len(metadata_cache.entries) != before_count
         if vram_gib is not None:
-            llamaswap_metadata["model_size_gib"] = round(vram_gib, 1)
-    return {"llamaswap": llamaswap_metadata}, cache_changed
+            model_metadata["model_size_gib"] = round(vram_gib, 1)
+    return model_metadata, cache_changed
 
 
 def resolve_context_length(

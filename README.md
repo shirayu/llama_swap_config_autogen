@@ -95,9 +95,8 @@ When `vram_estimation: true` is set, the generator reads metadata headers direct
 ```text
 name: qwen3-30b/instruct-2507:Q4_K_M
 metadata:
-  llamaswap:
-    model_family: qwen3-30b
-    model_size_gib: 18.8
+  model_family: qwen3-30b
+  model_size_gib: 18.8
 ```
 
 Metadata is locally cached under `~/.cache/llama_swap_config_autogen/gguf_metadata.json` and automatically invalidated when GGUF files change.
@@ -119,9 +118,8 @@ models:
     cmd: ...
     name: "qwen3-30b/instruct-2507:Q4_K_M"
     metadata:
-      llamaswap:
-        model_family: qwen3-30b
-        model_size_gib: 18.8
+      model_family: qwen3-30b
+      model_size_gib: 18.8
     capabilities:
       context: 32768
       in: [text]
