@@ -54,7 +54,8 @@ def test_mmproj_auto_attach_and_skip_as_standalone_model_without_no_mmproj_by_de
     assert model_id in output["models"]
     assert "--mmproj" in output["models"][model_id]["cmd"]
     assert str(mmproj_file) in output["models"][model_id]["cmd"]
-    assert output["models"][model_id]["name"] == "qwen3.5-35b/standard:Q4_K_M 🌐"
+    assert output["models"][model_id]["name"] == "qwen3.5-35b/standard:Q4_K_M"
+    assert output["models"][model_id]["capabilities"]["in"] == ["text", "image"]
     assert all(":F16" not in key for key in output["models"].keys())
     no_mmproj_entries = [k for k, v in output["models"].items() if v["name"].endswith("(no mmproj)")]
     assert no_mmproj_entries == []
@@ -93,7 +94,7 @@ def test_mmproj_override_applies_when_auto_attach_is_disabled(tmp_path: Path):
     assert str(override_mmproj) in output["models"][model_id]["cmd"]
 
 
-def test_model_labels_override_mmproj_default_label(tmp_path: Path):
+def test_visual_model_labels_are_not_embedded_in_name(tmp_path: Path):
     models_dir = tmp_path / "models"
     target_dir = models_dir / "Qwen3-VL-32B" / "instruct"
     target_dir.mkdir(parents=True)
@@ -126,10 +127,10 @@ def test_model_labels_override_mmproj_default_label(tmp_path: Path):
     output = generate_full_config(settings, config)
 
     model_id = "qwen3-vl-32b/instruct:Q4_K_M"
-    assert output["models"][model_id]["name"] == "qwen3-vl-32b/instruct:Q4_K_M 👁️"
+    assert output["models"][model_id]["name"] == "qwen3-vl-32b/instruct:Q4_K_M"
 
 
-def test_model_labels_can_label_non_mmproj_models(tmp_path: Path):
+def test_audio_capabilities_are_structured_instead_of_visual_labels(tmp_path: Path):
     models_dir = tmp_path / "models"
     target_dir = models_dir / "Kokoro"
     target_dir.mkdir(parents=True)
@@ -142,13 +143,11 @@ def test_model_labels_can_label_non_mmproj_models(tmp_path: Path):
         config_path,
         models_dir,
         extra={
-            "model_labels": {
-                "rules": [
-                    {
-                        "pattern": "kokoro",
-                        "label": " 🔊",
-                    }
-                ],
+            "model_patterns": {
+                "kokoro": {
+                    "macro": "default-params",
+                    "capabilities": {"out": ["audio"]},
+                },
             }
         },
     )
@@ -157,7 +156,12 @@ def test_model_labels_can_label_non_mmproj_models(tmp_path: Path):
     settings = create_settings_from_config(config, config_path)
     output = generate_full_config(settings, config)
 
-    assert output["models"]["kokoro:Q8_0"]["name"] == "kokoro:Q8_0 🔊"
+    assert output["models"]["kokoro:Q8_0"]["name"] == "kokoro:Q8_0"
+    assert output["models"]["kokoro:Q8_0"]["capabilities"] == {
+        "context": 32768,
+        "in": ["text"],
+        "out": ["audio"],
+    }
 
 
 def test_quantization_is_included_in_generated_model_name(tmp_path: Path):

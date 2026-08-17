@@ -15,7 +15,6 @@ from llama_swap_config_autogen.generator import (
     extract_context_length,
     extract_ngl,
     generate_full_config,
-    select_model_label,
 )
 from llama_swap_config_autogen.gguf_metadata import (
     GGUFMetadata,
@@ -439,7 +438,7 @@ class TestExpandMacroExpression:
 
 
 # ---------------------------------------------------------------------------
-# Integration: model name contains VRAM label
+# Integration: model metadata contains VRAM estimate
 # ---------------------------------------------------------------------------
 
 
@@ -457,12 +456,12 @@ def _write_config(config_path: Path, models_dir: Path, vram_estimation: bool = T
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
 
-class TestVramLabelInGeneratedConfig:
+class TestVramMetadataInGeneratedConfig:
     def _fake_get_metadata(self, path: Path, cache: GGUFMetadataCache) -> GGUFMetadata:
         stat = path.stat()
         return _make_metadata(mtime=stat.st_mtime, size=stat.st_size)
 
-    def test_model_name_includes_vram_label(self, tmp_path):
+    def test_model_metadata_includes_vram_estimate(self, tmp_path):
         models_dir = tmp_path / "models"
         model_dir = models_dir / "llama3"
         model_dir.mkdir(parents=True)
@@ -478,10 +477,12 @@ class TestVramLabelInGeneratedConfig:
         with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=self._fake_get_metadata):
             result = generate_full_config(settings, config)
 
-        names = [v["name"] for v in result["models"].values()]
-        assert any("[" in name and "GB]" in name for name in names), f"No VRAM label found in names: {names}"
+        model = result["models"]["llama3:Q4_K_M"]
+        assert model["name"] == "llama3:Q4_K_M"
+        assert model["metadata"]["llamaswap"]["model_family"] == "llama3"
+        assert isinstance(model["metadata"]["llamaswap"]["model_size_gib"], float)
 
-    def test_model_name_no_label_when_disabled(self, tmp_path):
+    def test_model_metadata_omits_vram_when_disabled(self, tmp_path):
         models_dir = tmp_path / "models"
         model_dir = models_dir / "llama3"
         model_dir.mkdir(parents=True)
@@ -496,10 +497,11 @@ class TestVramLabelInGeneratedConfig:
 
         result = generate_full_config(settings, config)
 
-        names = [v["name"] for v in result["models"].values()]
-        assert all("[" not in name for name in names), f"Unexpected VRAM label in names: {names}"
+        model = result["models"]["llama3:Q4_K_M"]
+        assert model["name"] == "llama3:Q4_K_M"
+        assert model["metadata"]["llamaswap"] == {"model_family": "llama3"}
 
-    def test_model_name_no_label_on_read_error(self, tmp_path):
+    def test_model_metadata_omits_vram_on_read_error(self, tmp_path):
         models_dir = tmp_path / "models"
         model_dir = models_dir / "llama3"
         model_dir.mkdir(parents=True)
@@ -518,8 +520,9 @@ class TestVramLabelInGeneratedConfig:
         ):
             result = generate_full_config(settings, config)
 
-        names = [v["name"] for v in result["models"].values()]
-        assert all("[" not in name for name in names), f"Unexpected VRAM label in names: {names}"
+        model = result["models"]["llama3:Q4_K_M"]
+        assert model["name"] == "llama3:Q4_K_M"
+        assert model["metadata"]["llamaswap"] == {"model_family": "llama3"}
 
     def test_cache_is_saved_after_new_entry(self, tmp_path):
         models_dir = tmp_path / "models"
@@ -553,7 +556,7 @@ class TestVramLabelInGeneratedConfig:
 
         assert saved.get("called"), "cache.save() was not called after new entries were added"
 
-    def test_variant_composite_macro_includes_vram_label(self, tmp_path):
+    def test_variant_composite_macro_includes_vram_metadata(self, tmp_path):
         models_dir = tmp_path / "models"
         model_dir = models_dir / "deepseek-r1-distill-qwen-32b"
         model_dir.mkdir(parents=True)
@@ -582,9 +585,10 @@ class TestVramLabelInGeneratedConfig:
         with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=self._fake_get_metadata):
             result = generate_full_config(settings, config)
 
-        fast_names = [v["name"] for model_id, v in result["models"].items() if model_id.endswith("-fast")]
-        assert fast_names, "Fast variant was not generated"
-        assert all("GB]" in name for name in fast_names), f"Variant VRAM label missing: {fast_names}"
+        fast_models = [v for model_id, v in result["models"].items() if model_id.endswith("-fast")]
+        assert fast_models, "Fast variant was not generated"
+        assert all("model_size_gib" in v["metadata"]["llamaswap"] for v in fast_models)
+        assert all("[" not in v["name"] for v in fast_models)
 
 
 class TestVramEstimationEdgeCases:
@@ -631,10 +635,10 @@ class TestVramEstimationEdgeCases:
         with patch("llama_swap_config_autogen.generator.get_gguf_metadata", return_value=meta):
             result = generate_full_config(settings, config)
 
-        with_mmproj = result["models"]["gemma:Q4_K_M"]["name"]
-        no_mmproj = result["models"]["gemma:Q4_K_M--no-mmproj"]["name"]
+        with_mmproj = result["models"]["gemma:Q4_K_M"]["metadata"]["llamaswap"]["model_size_gib"]
+        no_mmproj = result["models"]["gemma:Q4_K_M--no-mmproj"]["metadata"]["llamaswap"]["model_size_gib"]
 
-        assert with_mmproj != no_mmproj.removesuffix(" (no mmproj)")
+        assert with_mmproj != no_mmproj
 
     def test_model_patterns_can_match_generated_model_id(self, tmp_path):
         models_dir = tmp_path / "models"
@@ -879,38 +883,3 @@ class TestVramEstimationEdgeCases:
         assert "gemma-4-12b:Q4_K_M" not in result["models"]
         assert "gemma-4-12b:Q4_K_M--32k" in result["models"]
         assert "gemma-4-12b:Q4_K_M--48k" in result["models"]
-
-
-class TestSelectModelLabel:
-    """Test select_model_label with string and list patterns."""
-
-    def test_select_model_label_list_patterns(self):
-        from llama_swap_config_autogen.models import ModelLabelRule, ModelLabelsConfig
-
-        model_labels = ModelLabelsConfig(
-            mmproj_default=" 🌐",
-            rules=[
-                ModelLabelRule(
-                    pattern=["qwen-vl", "gemma-3"],
-                    label=" 👁️",
-                    requires_mmproj=True,
-                ),
-                ModelLabelRule(
-                    pattern="whisper",
-                    label=" 🎧",
-                ),
-            ],
-        )
-
-        # Matched by list pattern (qwen-vl) with mmproj
-        assert select_model_label(model_labels, "qwen-vl-model", "Qwen VL", "qwen-vl.gguf", True) == " 👁️"
-        # Matched by list pattern (gemma-3) with mmproj
-        assert select_model_label(model_labels, "gemma-3-model", "Gemma 3", "gemma-3.gguf", True) == " 👁️"
-        # List pattern matched but lacks mmproj, falls back to empty
-        assert select_model_label(model_labels, "gemma-3-model", "Gemma 3", "gemma-3.gguf", False) == ""
-
-        # Matched by string pattern
-        assert select_model_label(model_labels, "whisper-model", "Whisper", "whisper.gguf", False) == " 🎧"
-
-        # Not matched
-        assert select_model_label(model_labels, "other-model", "Other", "other.gguf", False) == ""

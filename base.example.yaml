@@ -35,23 +35,6 @@ mmproj:
   no_mmproj_suffix: ' (no mmproj)'
   overrides: {}
 
-model_labels:
-  mmproj_default: ' 🌐'
-  rules:
-    - pattern:
-        - qwen-vl
-        - qwen3-vl
-        - glm-4.6v
-        - gemma-3
-        - gemma-4
-        - small-3.2
-      label: ' 👁️'
-      requires_mmproj: true
-    - pattern: whisper
-      label: ' 🎧'
-    - pattern: kokoro
-      label: ' 🔊'
-
 macros:
   # Runtime
   binary: /app/llama-server
@@ -100,6 +83,18 @@ macros:
   glm-47-thinking-off-params: ${glm-47-params} --reasoning off
 
 model_patterns:
+  # Audio capabilities are declared structurally instead of in model names.
+  whisper:
+    macro: default-params
+    capabilities:
+      in: [audio]
+      out: [text]
+
+  kokoro:
+    macro: default-params
+    capabilities:
+      out: [audio]
+
   # Reasoning-focused models
   r1-distill-qwen-32b:
     macro: deepseek-r1-params

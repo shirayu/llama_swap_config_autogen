@@ -17,7 +17,7 @@ models:
   # Still manually listing all files and quantizations... 😵
 ```
 
-`llama-swap-config-autogen` automates model discovery, wraps models in visual labels, resolves VRAM estimation dynamically, and collapses variations using **parameterized macros** and **variant presets**:
+`llama-swap-config-autogen` automates model discovery, exposes model metadata structurally, resolves VRAM estimation dynamically, and collapses variations using **parameterized macros** and **variant presets**:
 
 ```yaml
 #  The automated, DRY way in base.yaml:
@@ -90,10 +90,14 @@ The generator automatically discovers `.gguf` files under each entry in `models:
 
 ### 💾 Dynamic VRAM Estimation
 
-When `vram_estimation: true` is set, the generator reads metadata headers directly from discovered GGUFs to calculate required VRAM (based on active GPU offload layers `-ngl` and context length `-c` resolved from your macros) and appends it to model display names:
+When `vram_estimation: true` is set, the generator reads metadata headers directly from discovered GGUFs to calculate required VRAM (based on active GPU offload layers `-ngl` and context length `-c` resolved from your macros) and emits it as structured model metadata:
 
 ```text
-name: qwen3-30b/instruct-2507:Q4_K_M [18.8 GB]
+name: qwen3-30b/instruct-2507:Q4_K_M
+metadata:
+  llamaswap:
+    model_family: qwen3-30b
+    model_size_gib: 18.8
 ```
 
 Metadata is locally cached under `~/.cache/llama_swap_config_autogen/gguf_metadata.json` and automatically invalidated when GGUF files change.
@@ -114,6 +118,10 @@ models:
   "qwen3-30b/instruct-2507:Q4_K_M":
     cmd: ...
     name: "qwen3-30b/instruct-2507:Q4_K_M"
+    metadata:
+      llamaswap:
+        model_family: qwen3-30b
+        model_size_gib: 18.8
     capabilities:
       context: 32768
       in: [text]
@@ -139,7 +147,7 @@ To keep your `base.yaml` short and free from copy-paste duplications, the tool s
 
 1. **Parameterized Macros**: Declare positional templates like `${ngl:999}` or `${ctx:32768}` to prevent creating distinct macros for every context size.
 2. **Variant Presets**: Define variant templates (e.g. CPU offload) once, and bind arguments at the model pattern level using tags (`variants: [cpu, short-ctx]`).
-3. **Multi-Pattern Labels**: Attach visual tags (like `👁️`, `🎧`) to multiple model matches using lists of substrings in rules.
+3. **Structured Model Metadata**: Expose model family, VRAM estimates, and modality capabilities through llama-swap metadata instead of display-name decorations.
 
 For a detailed step-by-step guide with examples, see the [**`tutorial.md`**](./tutorial.md).
 For the complete technical file format definition, see the [**`spec.md`**](./spec.md).

@@ -43,13 +43,6 @@ mmproj:                              # optional
   generate_no_mmproj_variant: <bool> # default: false
   no_mmproj_suffix: <string>         # default: " (no mmproj)"
   overrides: { <model-id|display-name|filename>: <path>, ... }
-model_labels:                        # optional
-  mmproj_default: <string>            # default: " 🌐"
-  rules:
-    - pattern: <substring or list[substring]>
-      label: <string>
-      requires_mmproj: <bool>         # optional, default: false
-
 default_ttl: <int>                   # optional, default: 300
 healthCheckTimeout: <int>            # optional, default: 240
 logLevel: <string>                   # optional, default: info
@@ -142,25 +135,6 @@ Behavior when `enabled: false`:
 
 - Legacy behavior is kept: `mmproj` files are treated like normal `.gguf` model files.
 
-### 3.7 `model_labels` (optional)
-
-- Type: `object`
-- Fields:
-    - `mmproj_default` (`string`, default `" 🌐"`)
-    - `rules` (`list`, default `[]`)
-
-Rule fields:
-
-- `pattern` (`string`, required): matched as a case-insensitive substring against model ID, display name, or filename.
-- `label` (`string`, required): appended to the generated model `name`.
-- `requires_mmproj` (`bool`, default `false`): when `true`, the rule only applies if `--mmproj` was attached.
-
-Behavior:
-
-- Models with an attached `mmproj` get `mmproj_default` appended to their display `name`.
-- Matching rules override the current label.
-- Rules can also label non-`mmproj` models, such as audio or TTS models, when `requires_mmproj` is omitted or `false`.
-
 ## 4. Macro Resolution Rules
 
 ## 4.1 Reference syntax
@@ -192,6 +166,7 @@ For each discovered `.gguf` file:
 - Display name: derived from the relative directory path and lowercased.
 - Model ID: derived as `<relative-directory-path-lowercased>:<format>`.
 - Model name: derived as `<relative-directory-path-lowercased>:<format>`.
+- Model names contain no VRAM or modality display labels; those values are emitted as structured fields.
 - Quantization format: extracted from the filename suffix such as `Q4_K_M`, `Q8_0`, `BF16`, or `F16`.
 - Generated display names must be unique across all emitted model entries.
 - Duplicate model IDs are ignored after first occurrence.
@@ -223,6 +198,12 @@ quantization suffix for model ID generation.
     - `tools` -> `true` when `vram_estimation: true` and the GGUF's `tokenizer.chat_template` metadata
       references tool calling (`tools`/`tool_calls`); otherwise omitted unless set explicitly.
     - `out`, `reranker` -> emitted only when explicitly set in `model_patterns` (no auto-derivation).
+- `metadata.llamaswap.model_family` -> the first segment of the generated display name.
+- `metadata.llamaswap.model_size_gib` -> the numeric VRAM estimate when `vram_estimation: true`; omitted when
+  estimation is disabled or fails.
+
+Audio models should declare their modalities explicitly in `model_patterns`, for example `in: [audio]` for speech
+recognition or `out: [audio]` for text-to-speech models.
 
 ## 7. Recommended Authoring Rules
 

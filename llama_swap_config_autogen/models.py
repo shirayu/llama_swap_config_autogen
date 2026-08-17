@@ -29,17 +29,6 @@ class MmprojConfig(BaseModel):
     no_mmproj_suffix: str = Field(default=" (no mmproj)")
 
 
-class ModelLabelRule(BaseModel):
-    pattern: str | list[str]
-    label: str
-    requires_mmproj: bool = Field(default=False)
-
-
-class ModelLabelsConfig(BaseModel):
-    mmproj_default: str = Field(default=" 🌐")
-    rules: list[ModelLabelRule] = Field(default_factory=list)
-
-
 class Config(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -49,7 +38,6 @@ class Config(BaseModel):
     variants: list[dict[str, Any]] = Field(default_factory=list)
     variant_presets: dict[str, Any] = Field(default_factory=dict)
     mmproj: MmprojConfig = Field(default_factory=MmprojConfig)
-    model_labels: ModelLabelsConfig = Field(default_factory=ModelLabelsConfig)
     default_ttl: int = Field(default=300)
     vram_estimation: bool = Field(default=False)
 
@@ -103,6 +91,7 @@ class YamlModelConfig(BaseModel):
     capabilities: CapabilitiesConfig | None = Field(
         default=None, description="Model capabilities such as context length"
     )
+    metadata: dict[str, Any] | None = Field(default=None, description="Provider metadata exposed by llama-swap")
 
     model_config = {"arbitrary_types_allowed": True}
 

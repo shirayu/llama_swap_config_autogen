@@ -118,36 +118,7 @@ model_patterns:
 
 ---
 
-## 4. Model Labels with Multi-Pattern Lists
-
-To make your llama-swap web UI look premium, you can decorate model names with visual tags (emojis). For example, `👁️` for vision models, `🎧` for audio, or `🔊` for TTS.
-
-If you have multiple models requiring the same label (like many vision-capable models), you can group them into a single rule using a list pattern.
-
-```yaml
-model_labels:
-  mmproj_default: ' 🌐'
-  rules:
-    # Match any of these substrings to attach ' 👁️'
-    - pattern:
-        - qwen-vl
-        - qwen3-vl
-        - glm-4.6v
-        - gemma-3
-        - gemma-4
-        - small-3.2
-      label: ' 👁️'
-      requires_mmproj: true # Only label if mmproj is successfully attached
-
-    - pattern: whisper
-      label: ' 🎧'
-```
-
-This saves you from copying and pasting the same rule block for every multimodal model family.
-
----
-
-## 5. Explicit Multi-Modal Projection (mmproj) Binding
+## 4. Explicit Multi-Modal Projection (mmproj) Binding
 
 When configuring multimodal (vision) models, you might want to share a single `mmproj` file among different variants of the same model family, even if the variants are stored in different directories (e.g., when a fine-tuned model doesn't ship with its own `mmproj` file).
 
@@ -196,17 +167,7 @@ mmproj:
   no_mmproj_suffix: ' (no mmproj)'
   overrides: {}
 
-# 3. Model visual labels
-model_labels:
-  mmproj_default: ' 🌐'
-  rules:
-    - pattern: [qwen-vl, qwen3-vl, glm-4.6v, gemma-3, gemma-4]
-      label: ' 👁️'
-      requires_mmproj: true
-    - pattern: whisper
-      label: ' 🎧'
-
-# 4. DRY parameterized macros
+# 3. DRY parameterized macros
 macros:
   binary: /app/llama-server
   common-base: --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on
