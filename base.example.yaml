@@ -69,6 +69,10 @@ macros:
   gpt-oss-20b-params: ${reasoning-base} -c 0 -fa
   gpt-oss-120b-params: ${reasoning-base} ${ngl:13} --ctx-size 16384 --no-mmap
   qwen-context-large-params: ${default-params} ${ctx:65536}
+  qwen-long-context-params: ${default-params} ${ctx:163840}
+  qwen-long-context-thinking-off-params: ${qwen-long-context-params} --reasoning off
+  qwen-long-context-memory-efficient-params: ${default-params} ${memory-efficient} ${ctx:163840}
+  qwen-long-context-memory-efficient-thinking-off-params: ${qwen-long-context-memory-efficient-params} --reasoning off
   qwen-coder-params: ${default-params} ${temp-coding} ${ctx:32768}
   qwen-cpu-params: ${default-params} ${cpu-offload:12,16} ${ctx:65536}
   qwen-cpu-params-big: ${default-params} ${ngl:15} ${cpu-offload:12,16} ${ctx:65536}
@@ -142,7 +146,7 @@ model_patterns:
   qwen3:
     macro: default-params
     thinking-off-params: thinking-off-params
-    variants: [short-ctx, thinking-off]
+    variants: [short-ctx, thinking-off, long-context-q8, long-context-q4]
 
   swallow-70b/instruct:
     macro: default-params
@@ -180,6 +184,18 @@ variant_presets:
   thinking-off:
     - suffix: ' (thinking off)'
       macro: ${thinking-off-params}
+
+  long-context-q8:
+    - suffix: ' (long ctx)'
+      macro: qwen-long-context-params
+    - suffix: ' (long ctx, thinking off)'
+      macro: qwen-long-context-thinking-off-params
+
+  long-context-q4:
+    - suffix: ' (long ctx, q4 kv)'
+      macro: qwen-long-context-memory-efficient-params
+    - suffix: ' (long ctx, q4 kv, thinking off)'
+      macro: qwen-long-context-memory-efficient-thinking-off-params
 
   gemma-4-variants:
     - suffix: ' (32k q8 off)'
