@@ -431,6 +431,8 @@ def build_model_metadata(
         reasoning_supported = resolve_reasoning_support(path_model, metadata_cache)
         if reasoning_supported is not None:
             model_metadata["reasoning_supported"] = reasoning_supported
+            if reasoning_supported and "reasoning" not in model_metadata:
+                model_metadata["reasoning"] = "on"
         cache_changed = len(metadata_cache.entries) != before_count
     return model_metadata, cache_changed
 

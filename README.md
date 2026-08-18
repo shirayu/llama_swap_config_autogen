@@ -103,16 +103,16 @@ Metadata is locally cached under `~/.cache/llama_swap_config_autogen/gguf_metada
 
 Two more fields are auto-derived into `metadata`, so "thinking off" no longer has to be encoded only in a display-name suffix:
 
-- `reasoning: "off"`: added whenever the expanded launch command contains `--reasoning off` (e.g. a `thinking-off` variant). Detected purely from the command string, so it works even with `vram_estimation: false`.
+- `reasoning: "off"`: added whenever the expanded launch command contains `--reasoning off` (e.g. a `thinking-off` variant). `reasoning: "on"` is added when GGUF metadata reports reasoning support and the command does not disable it. The `off` value takes precedence. The command-only `off` detection works even with `vram_estimation: false`.
 - `reasoning_supported`: `true`/`false` reflecting whether the GGUF's chat template indicates the model architecture supports reasoning/thinking mode at all (independent of whether a given variant launches with it off). Unlike `tools` (below), this is always emitted (not omitted on `false`) whenever GGUF headers are read — set `vram_estimation: true`, or set `read_gguf_metadata: true` if you want this detection without paying for VRAM estimation.
 
 ```text
-name: qwen3-30b/instruct-2507:Q4_K_M (thinking off)
+name: qwen3-30b/instruct-2507:Q4_K_M
 metadata:
   model_family: qwen3-30b
   model_size_gib: 18.8
-  reasoning: "off"
   reasoning_supported: true
+  reasoning: "on"
 ```
 
 ### 📏 Model Capabilities

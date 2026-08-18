@@ -645,6 +645,7 @@ class TestVramMetadataInGeneratedConfig:
 
         model = result["models"]["qwen3:Q4_K_M"]
         assert model["metadata"]["reasoning_supported"] is True
+        assert model["metadata"]["reasoning"] == "on"
 
     def test_model_metadata_includes_reasoning_supported_false_from_gguf(self, tmp_path):
         models_dir = tmp_path / "models"
