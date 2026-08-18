@@ -236,7 +236,7 @@ macros:
   ctx: --ctx-size ${1}
   default-params: ${common-base} ${ngl:999} ${ctx:32768}
   qwen-cpu: ${default-params} --n-cpu-moe 12 --threads 16 ${ctx:65536}
-  gemma-off: ${default-params} --reasoning off
+  gemma-params: ${default-params}
 
 model_patterns:
   qwen3:
@@ -244,7 +244,7 @@ model_patterns:
     cpu-params: qwen-cpu
     variants: [cpu]
   gemma-4-:
-    macro: gemma-off
+    macro: gemma-params
     emit_base: false
     variants: [gemma-4-variants]
 

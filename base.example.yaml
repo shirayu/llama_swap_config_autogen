@@ -61,30 +61,24 @@ macros:
   # Presets
   deepseek-r1-params: ${reasoning-base} ${temp-reasoning}
   gemma-large-params: ${default-params} ${ngl:25} ${ctx:32768}
-  gemma-4-32k-q8-on-params: ${common-base} ${ngl:999} ${ctx:32768}
-  gemma-4-32k-q8-off-params: ${gemma-4-32k-q8-on-params} --reasoning off
-  gemma-4-64k-kv-q4-off-params: ${common-base} ${ngl:999} ${ctx:65536} --cache-type-k q4_0 --cache-type-v q4_0 --reasoning off
-  gemma-4-128k-kv-q4-off-params: ${common-base} ${ngl:999} ${ctx:131072} --cache-type-k q4_0 --cache-type-v q4_0 --reasoning off
+  gemma-4-32k-q8-params: ${common-base} ${ngl:999} ${ctx:32768}
+  gemma-4-64k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:65536} --cache-type-k q4_0 --cache-type-v q4_0
+  gemma-4-128k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:131072} --cache-type-k q4_0 --cache-type-v q4_0
   glm-47-params: ${default-params} --repeat-penalty 1.0 --temp 1.0
   gpt-oss-20b-params: ${reasoning-base} -c 0 -fa
   gpt-oss-120b-params: ${reasoning-base} ${ngl:13} --ctx-size 16384 --no-mmap
   qwen-context-large-params: ${default-params} ${ctx:65536}
   qwen-long-context-params: ${default-params} ${ctx:163840}
-  qwen-long-context-thinking-off-params: ${qwen-long-context-params} --reasoning off
   qwen-long-context-memory-efficient-params: ${default-params} ${memory-efficient} ${ctx:163840}
-  qwen-long-context-memory-efficient-thinking-off-params: ${qwen-long-context-memory-efficient-params} --reasoning off
   qwen-coder-params: ${default-params} ${temp-coding} ${ctx:32768}
   qwen-cpu-params: ${default-params} ${cpu-offload:12,16} ${ctx:65536}
   qwen-cpu-params-big: ${default-params} ${ngl:15} ${cpu-offload:12,16} ${ctx:65536}
   qwen-mtp-params: ${default-params} --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.8 --parallel 1
-  qwen-mtp-thinking-off-params: ${qwen-mtp-params} --reasoning off
 
   # Utility presets
   short-ctx-params: ${default-params} ${ctx:4096}
   long-context-params: ${default-params} ${ctx:65536}
   memory-constrained-params: ${default-params} ${low-memory} ${memory-efficient}
-  thinking-off-params: ${default-params} --reasoning off
-  glm-47-thinking-off-params: ${glm-47-params} --reasoning off
 
 model_patterns:
   # Audio capabilities are declared structurally instead of in model names.
@@ -118,20 +112,18 @@ model_patterns:
     variants: [memory-efficient, short-ctx]
 
   gemma-4-31b:
-    macro: gemma-4-32k-q8-off-params
+    macro: gemma-4-32k-q8-params
     emit_base: false
     variants: [gemma-4-variants]
     mmproj: unsloth_gemma-4-31B-it-GGUF_mmproj-BF16.gguf
 
   gemma-4-:
-    macro: gemma-4-32k-q8-off-params
+    macro: gemma-4-32k-q8-params
     emit_base: false
     variants: [gemma-4-variants]
 
   glm-4.7/flash:
     macro: glm-47-params
-    thinking-off-params: glm-47-thinking-off-params
-    variants: [thinking-off]
 
   # model_patterns are selected by first match in file order.
   # A pattern containing *, ?, or [ is treated as a glob (fnmatch) against the
@@ -140,13 +132,11 @@ model_patterns:
   # Keep the more specific qwen3.6-35b/a3b-mtp entry before qwen3.6-35b.
   "qwen3*mtp":
     macro: qwen-mtp-params
-    thinking-off-params: qwen-mtp-thinking-off-params
-    variants: [short-ctx, thinking-off]
+    variants: [short-ctx]
 
   qwen3:
     macro: default-params
-    thinking-off-params: thinking-off-params
-    variants: [short-ctx, thinking-off, long-context-q8, long-context-q4]
+    variants: [short-ctx, long-context-q8, long-context-q4]
 
   swallow-70b/instruct:
     macro: default-params
@@ -181,28 +171,18 @@ variant_presets:
     - suffix: ' (Fast)'
       macro: ${fast-params}
 
-  thinking-off:
-    - suffix: ' (thinking off)'
-      macro: ${thinking-off-params}
-
   long-context-q8:
     - suffix: ' (long ctx)'
       macro: qwen-long-context-params
-    - suffix: ' (long ctx, thinking off)'
-      macro: qwen-long-context-thinking-off-params
 
   long-context-q4:
     - suffix: ' (long ctx, q4 kv)'
       macro: qwen-long-context-memory-efficient-params
-    - suffix: ' (long ctx, q4 kv, thinking off)'
-      macro: qwen-long-context-memory-efficient-thinking-off-params
 
   gemma-4-variants:
-    - suffix: ' (32k q8 off)'
-      macro: gemma-4-32k-q8-off-params
-    - suffix: ' (64k q4 off)'
-      macro: gemma-4-64k-kv-q4-off-params
-    - suffix: ' (128k q4 off limit)'
-      macro: gemma-4-128k-kv-q4-off-params
-    - suffix: ' (32k q8 on)'
-      macro: gemma-4-32k-q8-on-params
+    - suffix: ' (32k q8)'
+      macro: gemma-4-32k-q8-params
+    - suffix: ' (64k q4)'
+      macro: gemma-4-64k-kv-q4-params
+    - suffix: ' (128k q4 limit)'
+      macro: gemma-4-128k-kv-q4-params

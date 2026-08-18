@@ -30,7 +30,6 @@ CACHE_TYPE_K_PATTERN = re.compile(r"--cache-type-k\s+([^\s]+)")
 CACHE_TYPE_V_PATTERN = re.compile(r"--cache-type-v\s+([^\s]+)")
 CPU_OFFLOAD_PATTERN = re.compile(r"(?:--cpu-moe|--n-cpu-moe\b|-ot\b[^\n]*=CPU)", re.IGNORECASE)
 N_CPU_MOE_PATTERN = re.compile(r"--n-cpu-moe\s+(\d+)")
-REASONING_OFF_PATTERN = re.compile(r"--reasoning\s+off\b", re.IGNORECASE)
 
 
 def extract_quantization_suffix(filename: str) -> str:
@@ -419,8 +418,6 @@ def build_model_metadata(
     model_metadata: dict[str, str | float | bool] = {
         "model_family": display_name.split("/", 1)[0],
     }
-    if REASONING_OFF_PATTERN.search(expanded_cmd):
-        model_metadata["reasoning"] = "off"
     cache_changed = False
     if metadata_cache is not None:
         before_count = len(metadata_cache.entries)
@@ -431,8 +428,6 @@ def build_model_metadata(
         reasoning_supported = resolve_reasoning_support(path_model, metadata_cache)
         if reasoning_supported is not None:
             model_metadata["reasoning_supported"] = reasoning_supported
-            if reasoning_supported and "reasoning" not in model_metadata:
-                model_metadata["reasoning"] = "on"
         cache_changed = len(metadata_cache.entries) != before_count
     return model_metadata, cache_changed
 

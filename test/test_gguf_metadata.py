@@ -520,7 +520,7 @@ class TestVramMetadataInGeneratedConfig:
         stat = path.stat()
         return _make_metadata(mtime=stat.st_mtime, size=stat.st_size)
 
-    def test_model_metadata_includes_reasoning_off_from_command(self, tmp_path):
+    def test_model_metadata_omits_reasoning_from_command(self, tmp_path):
         models_dir = tmp_path / "models"
         model_dir = models_dir / "qwen3"
         model_dir.mkdir(parents=True)
@@ -545,7 +545,7 @@ class TestVramMetadataInGeneratedConfig:
         result = generate_full_config(settings, config)
 
         model = result["models"]["qwen3:Q4_K_M"]
-        assert model["metadata"]["reasoning"] == "off"
+        assert "reasoning" not in model["metadata"]
 
     def test_model_metadata_omits_reasoning_without_flag(self, tmp_path):
         models_dir = tmp_path / "models"
@@ -564,7 +564,7 @@ class TestVramMetadataInGeneratedConfig:
         model = result["models"]["qwen3:Q4_K_M"]
         assert "reasoning" not in model["metadata"]
 
-    def test_model_metadata_does_not_flag_reasoning_format_flag(self, tmp_path):
+    def test_model_metadata_does_not_add_reasoning_for_reasoning_format_flag(self, tmp_path):
         models_dir = tmp_path / "models"
         model_dir = models_dir / "qwen3"
         model_dir.mkdir(parents=True)
@@ -591,7 +591,7 @@ class TestVramMetadataInGeneratedConfig:
         model = result["models"]["qwen3:Q4_K_M"]
         assert "reasoning" not in model["metadata"]
 
-    def test_model_metadata_includes_reasoning_off_via_variant(self, tmp_path):
+    def test_model_metadata_omits_reasoning_via_variant(self, tmp_path):
         models_dir = tmp_path / "models"
         model_dir = models_dir / "qwen3"
         model_dir.mkdir(parents=True)
@@ -621,7 +621,7 @@ class TestVramMetadataInGeneratedConfig:
         base_model = result["models"]["qwen3:Q4_K_M"]
         variant_model = result["models"]["qwen3:Q4_K_M--thinking-off"]
         assert "reasoning" not in base_model["metadata"]
-        assert variant_model["metadata"]["reasoning"] == "off"
+        assert "reasoning" not in variant_model["metadata"]
 
     def test_model_metadata_includes_reasoning_supported_from_gguf(self, tmp_path):
         models_dir = tmp_path / "models"
@@ -645,7 +645,7 @@ class TestVramMetadataInGeneratedConfig:
 
         model = result["models"]["qwen3:Q4_K_M"]
         assert model["metadata"]["reasoning_supported"] is True
-        assert model["metadata"]["reasoning"] == "on"
+        assert "reasoning" not in model["metadata"]
 
     def test_model_metadata_includes_reasoning_supported_false_from_gguf(self, tmp_path):
         models_dir = tmp_path / "models"

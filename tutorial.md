@@ -132,7 +132,7 @@ model_patterns:
   # The fine-tuned variant doesn't have an mmproj file in its own directory.
   # We bind the mmproj file from the 'it' variant by simply writing its filename.
   gemma-4-31b:
-    macro: gemma-4-32k-q8-off-params
+    macro: gemma-4-32k-q8-params
     emit_base: false
     variants: [gemma-4-variants]
     mmproj: gemma-4-31b-mmproj-BF16.gguf
