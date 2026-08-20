@@ -714,7 +714,7 @@ class TestVramMetadataInGeneratedConfig:
 
         model = result["models"]["qwen3:Q4_K_M"]
         assert model["metadata"]["reasoning_supported"] is True
-        assert "model_size_gib" not in model["metadata"]
+        assert "estimated_vram_bytes" not in model["metadata"]
 
     def test_model_metadata_includes_vram_estimate(self, tmp_path):
         models_dir = tmp_path / "models"
@@ -735,7 +735,52 @@ class TestVramMetadataInGeneratedConfig:
         model = result["models"]["llama3:Q4_K_M"]
         assert model["name"] == "llama3:Q4_K_M"
         assert model["metadata"]["model_family"] == "llama3"
-        assert isinstance(model["metadata"]["model_size_gib"], float)
+        assert isinstance(model["metadata"]["estimated_vram_bytes"], int)
+        assert model["metadata"]["file_size_bytes"] == model_file.stat().st_size
+
+    def test_model_metadata_omits_expert_counts_for_dense_model(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "llama3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "llama3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, models_dir)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=self._fake_get_metadata):
+            result = generate_full_config(settings, config)
+
+        model = result["models"]["llama3:Q4_K_M"]
+        assert "expert_count" not in model["metadata"]
+        assert "expert_used_count" not in model["metadata"]
+
+    def test_model_metadata_includes_expert_counts_for_moe_model(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "qwen3-30b"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "qwen3-30b-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, models_dir)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+
+        def fake_get_metadata(path, cache):
+            stat = path.stat()
+            return _make_metadata(mtime=stat.st_mtime, size=stat.st_size, expert_count=128, expert_used_count=8)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=fake_get_metadata):
+            result = generate_full_config(settings, config)
+
+        model = result["models"]["qwen3-30b:Q4_K_M"]
+        assert model["metadata"]["expert_count"] == 128
+        assert model["metadata"]["expert_used_count"] == 8
 
     def test_model_metadata_omits_vram_when_disabled(self, tmp_path):
         models_dir = tmp_path / "models"
@@ -842,7 +887,7 @@ class TestVramMetadataInGeneratedConfig:
 
         fast_models = [v for model_id, v in result["models"].items() if model_id.endswith("-fast")]
         assert fast_models, "Fast variant was not generated"
-        assert all("model_size_gib" in v["metadata"] for v in fast_models)
+        assert all("estimated_vram_bytes" in v["metadata"] for v in fast_models)
         assert all("[" not in v["name"] for v in fast_models)
 
 
@@ -890,8 +935,8 @@ class TestVramEstimationEdgeCases:
         with patch("llama_swap_config_autogen.generator.get_gguf_metadata", return_value=meta):
             result = generate_full_config(settings, config)
 
-        with_mmproj = result["models"]["gemma:Q4_K_M"]["metadata"]["model_size_gib"]
-        no_mmproj = result["models"]["gemma:Q4_K_M--no-mmproj"]["metadata"]["model_size_gib"]
+        with_mmproj = result["models"]["gemma:Q4_K_M"]["metadata"]["estimated_vram_bytes"]
+        no_mmproj = result["models"]["gemma:Q4_K_M--no-mmproj"]["metadata"]["estimated_vram_bytes"]
 
         assert with_mmproj != no_mmproj
 

@@ -200,9 +200,12 @@ quantization suffix for model ID generation.
     - `out`, `reranker` -> emitted only when explicitly set in `model_patterns` (no auto-derivation).
 - `metadata.model_family` -> the first segment of the generated display name. llama-swap exposes it under
   `meta.llamaswap.model_family` in `/v1/models`.
-- `metadata.model_size_gib` -> the numeric VRAM estimate when `vram_estimation: true`; llama-swap exposes it under
-  `meta.llamaswap.model_size_gib` in `/v1/models`. It is omitted when
-  estimation is disabled or fails.
+- `metadata.estimated_vram_bytes` -> the VRAM estimate in bytes when `vram_estimation: true`; llama-swap exposes it
+  under `meta.llamaswap.estimated_vram_bytes` in `/v1/models`. It is omitted when estimation is disabled or fails.
+- `metadata.file_size_bytes` -> the GGUF file's actual size on disk, in bytes. Emitted whenever GGUF headers are
+  read (`vram_estimation: true` or `read_gguf_metadata: true`).
+- `metadata.expert_count` / `metadata.expert_used_count` -> total and active expert counts from the GGUF headers,
+  emitted only for mixture-of-experts models (omitted for dense models).
 
 Audio models should declare their modalities explicitly in `model_patterns`, for example `in: [audio]` for speech
 recognition or `out: [audio]` for text-to-speech models.

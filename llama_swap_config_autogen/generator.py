@@ -409,13 +409,13 @@ def build_model_metadata(
     metadata_cache: GGUFMetadataCache | None,
     mmproj_path: Path | None = None,
     vram_estimation: bool = True,
-) -> tuple[dict[str, str | float | bool], bool]:
+) -> tuple[dict[str, str | int | bool], bool]:
     """Build model metadata and report whether the GGUF cache changed.
 
     llama-swap wraps this config-level metadata under ``meta.llamaswap`` in
     its /v1/models response, so this function must return the inner mapping.
     """
-    model_metadata: dict[str, str | float | bool] = {
+    model_metadata: dict[str, str | int | bool] = {
         "model_family": display_name.split("/", 1)[0],
     }
     cache_changed = False
@@ -424,10 +424,18 @@ def build_model_metadata(
         if vram_estimation:
             vram_gib = estimate_vram_gib(path_model, expanded_cmd, 0, metadata_cache, mmproj_path=mmproj_path)
             if vram_gib is not None:
-                model_metadata["model_size_gib"] = round(vram_gib, 1)
+                model_metadata["estimated_vram_bytes"] = round(vram_gib * 1024**3)
         reasoning_supported = resolve_reasoning_support(path_model, metadata_cache)
         if reasoning_supported is not None:
             model_metadata["reasoning_supported"] = reasoning_supported
+        try:
+            metadata = get_gguf_metadata(path_model, metadata_cache)
+            model_metadata["file_size_bytes"] = path_model.stat().st_size
+            if metadata.expert_count > 0:
+                model_metadata["expert_count"] = metadata.expert_count
+                model_metadata["expert_used_count"] = metadata.expert_used_count
+        except Exception as e:
+            logger.warning("Could not read GGUF metadata for %s: %s", path_model.name, e)
         cache_changed = len(metadata_cache.entries) != before_count
     return model_metadata, cache_changed
 

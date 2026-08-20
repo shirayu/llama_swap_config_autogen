@@ -96,21 +96,27 @@ When `vram_estimation: true` is set, the generator reads metadata headers direct
 name: qwen3-30b/instruct-2507:Q4_K_M
 metadata:
   model_family: qwen3-30b
-  model_size_gib: 18.8
+  estimated_vram_bytes: 20182171238
+  file_size_bytes: 18933312716
 ```
 
 Metadata is locally cached under `~/.cache/llama_swap_config_autogen/gguf_metadata.json` and automatically invalidated when GGUF files change.
 
-One additional field is auto-derived into `metadata`:
+A few additional fields are auto-derived into `metadata` whenever GGUF headers are read (`vram_estimation: true`, or `read_gguf_metadata: true` if you want detection without paying for VRAM estimation):
 
-- `reasoning_supported`: `true`/`false` reflecting whether the GGUF's chat template indicates the model architecture supports reasoning/thinking mode. This describes model capability, not the reasoning mode of an individual request. Unlike `tools` (below), it is always emitted (not omitted on `false`) whenever GGUF headers are read — set `vram_estimation: true`, or set `read_gguf_metadata: true` if you want this detection without paying for VRAM estimation.
+- `reasoning_supported`: `true`/`false` reflecting whether the GGUF's chat template indicates the model architecture supports reasoning/thinking mode. This describes model capability, not the reasoning mode of an individual request. Unlike `tools` (below), it is always emitted (not omitted on `false`).
+- `file_size_bytes`: the GGUF file's actual size on disk, in bytes.
+- `expert_count` / `expert_used_count`: total and active experts, emitted only for mixture-of-experts models (omitted for dense models).
 
 ```text
 name: qwen3-30b/instruct-2507:Q4_K_M
 metadata:
   model_family: qwen3-30b
-  model_size_gib: 18.8
+  estimated_vram_bytes: 20182171238
+  file_size_bytes: 18933312716
   reasoning_supported: true
+  expert_count: 128
+  expert_used_count: 8
 ```
 
 ### 📏 Model Capabilities
@@ -133,7 +139,8 @@ models:
     name: "qwen3-30b/instruct-2507:Q4_K_M"
     metadata:
       model_family: qwen3-30b
-      model_size_gib: 18.8
+      estimated_vram_bytes: 20182171238
+      file_size_bytes: 18933312716
     capabilities:
       context: 32768
       in: [text]
