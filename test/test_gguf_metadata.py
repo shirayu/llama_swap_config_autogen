@@ -42,6 +42,7 @@ def _make_metadata(
     feed_forward_length: int = 0,
     expert_feed_forward_length: int = 0,
     expert_shared_feed_forward_length: int = 0,
+    full_attention_interval: int = 0,
     supports_reasoning: bool = False,
     repo_url: str = "",
     license: str = "",
@@ -60,6 +61,7 @@ def _make_metadata(
         feed_forward_length=feed_forward_length,
         expert_feed_forward_length=expert_feed_forward_length,
         expert_shared_feed_forward_length=expert_shared_feed_forward_length,
+        full_attention_interval=full_attention_interval,
         supports_reasoning=supports_reasoning,
         repo_url=repo_url,
         license=license,
@@ -185,6 +187,26 @@ class TestEstimateVramGb:
         base = estimate_vram_gb(meta, 4 * 1024**3, ngl=32, context_length=4096)
         with_mmproj = estimate_vram_gb(meta, 4 * 1024**3, ngl=32, context_length=4096, extra_gpu_bytes=512 * 1024**2)
         assert with_mmproj > base
+
+    def test_full_attention_interval_reduces_kv_cache(self):
+        # Hybrid SSM/attention architectures only keep a KV cache on every Nth layer.
+        meta_hybrid = _make_metadata(num_layers=64, num_heads_kv=4, head_dim=256, full_attention_interval=4)
+        meta_dense = _make_metadata(num_layers=64, num_heads_kv=4, head_dim=256, full_attention_interval=0)
+        file_size = 4 * 1024**3
+        hybrid = estimate_vram_gb(meta_hybrid, file_size, ngl=64, context_length=131072)
+        dense = estimate_vram_gb(meta_dense, file_size, ngl=64, context_length=131072)
+        assert hybrid < dense
+        # Only 64/4 = 16 layers actually carry a KV cache.
+        kv = 2 * 16 * 4 * 256 * 131072 * 2 / 1024**3
+        assert abs(hybrid - (4.0 + kv)) < 0.01
+
+    def test_full_attention_interval_rounds_up_partial_offload(self):
+        meta = _make_metadata(num_layers=65, num_heads_kv=4, head_dim=256, full_attention_interval=4)
+        file_size = 4 * 1024**3
+        result = estimate_vram_gb(meta, file_size, ngl=65, context_length=4096)
+        model_ratio = 65 / 65
+        kv = 2 * 17 * 4 * 256 * 4096 * 2 / 1024**3  # ceil(65/4) = 17 attention layers
+        assert abs(result - (4.0 * model_ratio + kv)) < 0.01
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +392,64 @@ class TestReadGgufMetadata:
         assert meta.num_heads_kv == 8
         assert meta.embedding_length == 5120
         assert meta.context_length == 40960
+
+    def test_prefers_explicit_key_length_over_derived_head_dim(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00")
+
+        class FakeField:
+            def __init__(self, name, value):
+                self.name = name
+                self._value = value
+
+            def contents(self, index_or_slice=0):
+                return self._value
+
+        # embedding_length // head_count would give 213, but the GGUF explicitly
+        # states a head_dim of 256 (as seen on hybrid SSM/attention Qwen3.5 models).
+        fake_fields = {
+            "qwen35.block_count": FakeField("qwen35.block_count", [65]),
+            "qwen35.attention.head_count": FakeField("qwen35.attention.head_count", [24]),
+            "qwen35.attention.head_count_kv": FakeField("qwen35.attention.head_count_kv", [4]),
+            "qwen35.attention.key_length": FakeField("qwen35.attention.key_length", [256]),
+            "qwen35.embedding_length": FakeField("qwen35.embedding_length", [5120]),
+            "qwen35.context_length": FakeField("qwen35.context_length", [262144]),
+            "qwen35.full_attention_interval": FakeField("qwen35.full_attention_interval", [4]),
+        }
+        fake_reader = SimpleNamespace(fields=fake_fields)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta = _read_gguf_metadata(model)
+
+        assert meta.head_dim == 256
+        assert meta.full_attention_interval == 4
+
+    def test_falls_back_to_derived_head_dim_without_key_length(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00")
+
+        class FakeField:
+            def __init__(self, name, value):
+                self.name = name
+                self._value = value
+
+            def contents(self, index_or_slice=0):
+                return self._value
+
+        fake_fields = {
+            "qwen2.block_count": FakeField("qwen2.block_count", [32]),
+            "qwen2.attention.head_count": FakeField("qwen2.attention.head_count", [32]),
+            "qwen2.attention.head_count_kv": FakeField("qwen2.attention.head_count_kv", [8]),
+            "qwen2.embedding_length": FakeField("qwen2.embedding_length", [4096]),
+            "qwen2.context_length": FakeField("qwen2.context_length", [131072]),
+        }
+        fake_reader = SimpleNamespace(fields=fake_fields)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta = _read_gguf_metadata(model)
+
+        assert meta.head_dim == 128
+        assert meta.full_attention_interval == 0
         assert meta.head_dim == 128
 
     def test_load_returns_empty_when_no_file(self, tmp_path):

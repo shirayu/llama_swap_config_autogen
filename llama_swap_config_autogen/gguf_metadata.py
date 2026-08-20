@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 CACHE_PATH = Path.home() / ".cache" / "llama_swap_config_autogen" / "gguf_metadata.json"
 ARCH_FALLBACKS = ["llama", "mistral", "phi3", "gemma", "qwen2"]
-CACHE_SCHEMA_VERSION = 6
+CACHE_SCHEMA_VERSION = 7
 TOOL_TEMPLATE_MARKERS = ("tool_calls", "tools")
 REASONING_TEMPLATE_MARKERS = ("enable_thinking", "reasoning_content")
 
@@ -31,6 +31,7 @@ class GGUFMetadata(BaseModel):
     feed_forward_length: int = 0
     expert_feed_forward_length: int = 0
     expert_shared_feed_forward_length: int = 0
+    full_attention_interval: int = 0
     supports_tools: bool = False
     supports_reasoning: bool = False
     repo_url: str = ""
@@ -174,7 +175,13 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         0,
     )
 
-    head_dim = (embedding_length // num_heads) if num_heads > 0 else 0
+    head_dim = next((get_int(f"{a}.attention.key_length") for a in archs if get_int(f"{a}.attention.key_length")), 0)
+    if head_dim == 0:
+        head_dim = (embedding_length // num_heads) if num_heads > 0 else 0
+    full_attention_interval = next(
+        (get_int(f"{a}.full_attention_interval") for a in archs if get_int(f"{a}.full_attention_interval")),
+        0,
+    )
 
     chat_template_keys = [key for key in kv if key.startswith("tokenizer.chat_template")]
     supports_tools = any(marker in get_str(key) for key in chat_template_keys for marker in TOOL_TEMPLATE_MARKERS)
@@ -199,6 +206,7 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         feed_forward_length=feed_forward_length,
         expert_feed_forward_length=expert_feed_forward_length,
         expert_shared_feed_forward_length=expert_shared_feed_forward_length,
+        full_attention_interval=full_attention_interval,
         supports_tools=supports_tools,
         supports_reasoning=supports_reasoning,
         repo_url=repo_url,
@@ -274,11 +282,15 @@ def estimate_vram_gb(
     model_vram = file_size_bytes * gpu_ratio
 
     # KV cache on GPU (all layers when using GPU)
-    # KV = 2 (K+V) * layers * num_heads_kv * head_dim * context * bytes_per_element
+    # KV = 2 (K+V) * attn_layers * num_heads_kv * head_dim * context * bytes_per_element
+    # Hybrid SSM/attention architectures (e.g. full_attention_interval) only keep
+    # a KV cache on every Nth layer; the rest use a fixed-size SSM state instead.
     kv_vram = 0.0
     if effective_ngl > 0 and metadata.num_heads_kv > 0 and metadata.head_dim > 0:
+        interval = metadata.full_attention_interval
+        attn_layers = -(-effective_ngl // interval) if interval > 0 else effective_ngl
         kv_vram = (
-            effective_ngl * metadata.num_heads_kv * metadata.head_dim * context_length * (k_cache_bytes + v_cache_bytes)
+            attn_layers * metadata.num_heads_kv * metadata.head_dim * context_length * (k_cache_bytes + v_cache_bytes)
         )
 
     total_bytes = model_vram + kv_vram + extra_gpu_bytes
