@@ -90,7 +90,7 @@ The generator automatically discovers `.gguf` files under each entry in `models:
 
 ### 💾 Dynamic VRAM Estimation
 
-When `vram_estimation: true` is set, the generator reads metadata headers directly from discovered GGUFs to calculate required VRAM (based on active GPU offload layers `-ngl` and context length `-c` resolved from your macros) and emits it as structured model metadata:
+When `vram_estimation: true` is set and `generate --llama-bin` is provided, the generator invokes llama.cpp's own `fit-params --fit-print on` tool for each model (based on active GPU offload layers `-ngl`, context length `-c`, cache quantization, and CPU-offload flags resolved from your macros) and emits the resulting VRAM figure as structured model metadata:
 
 ```text
 name: qwen3-30b/instruct-2507:Q4_K_M
@@ -100,7 +100,24 @@ metadata:
   file_size_bytes: 18933312716
 ```
 
-Metadata is locally cached under `~/.cache/llama_swap_config_autogen/gguf_metadata.json` and automatically invalidated when GGUF files change.
+`--llama-bin` accepts any command that runs a `fit-params`-capable llama.cpp binary, split with `shlex`, e.g.:
+
+```sh
+llama-swap-config-autogen generate --config config.yaml --llama-bin /opt/llama.cpp/bin/llama
+# or, when llama.cpp runs inside a container:
+llama-swap-config-autogen generate --config config.yaml --llama-bin "podman container exec llama-swap /app/llama"
+```
+
+Since `fit-params` loads (without allocating) the actual model on the machine running the generator, VRAM estimation is only available there — it is skipped (with a warning) when `--llama-bin` is omitted, even if `vram_estimation: true`.
+
+If the runtime sees model files under a different path than the one scanned under `models:` (e.g. a container mount), set `path_prefix_map` in `config.yaml` to rewrite host paths to runtime paths. This applies both to the `-m` argument in generated commands and to the path passed to `fit-params`:
+
+```yaml
+path_prefix_map:
+  /opt/data/llm/models/: /models/
+```
+
+Results are locally cached under `~/.cache/llama_swap_config_autogen/fit_params_vram.json`, keyed by model file (mtime/size) plus the resolved `-ngl`/`-c`/cache-type/CPU-offload arguments, and automatically invalidated when any of those change. GGUF header metadata used for capability detection is cached separately under `~/.cache/llama_swap_config_autogen/gguf_metadata.json`.
 
 A few additional fields are auto-derived into `metadata` whenever GGUF headers are read (`vram_estimation: true`, or `read_gguf_metadata: true` if you want detection without paying for VRAM estimation):
 

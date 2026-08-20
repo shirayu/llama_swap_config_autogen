@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from .config import load_macro_config
-from .gguf_metadata import GGUFMetadataCache, estimate_vram_gb, get_gguf_metadata
+from .fit_params import FitParamsCache, apply_path_prefix_map, estimate_vram_gib_via_fit_params
+from .gguf_metadata import GGUFMetadataCache, get_gguf_metadata
 from .models import (
     CapabilitiesConfig,
     Config,
@@ -31,7 +32,6 @@ CONTEXT_PATTERN = re.compile(r"(?:-c|--ctx-size)\s+(\d+)")
 CACHE_TYPE_K_PATTERN = re.compile(r"--cache-type-k\s+([^\s]+)")
 CACHE_TYPE_V_PATTERN = re.compile(r"--cache-type-v\s+([^\s]+)")
 CPU_OFFLOAD_PATTERN = re.compile(r"(?:--cpu-moe|--n-cpu-moe\b|-ot\b[^\n]*=CPU)", re.IGNORECASE)
-N_CPU_MOE_PATTERN = re.compile(r"--n-cpu-moe\s+(\d+)")
 
 
 def extract_quantization_suffix(filename: str) -> str:
@@ -263,142 +263,67 @@ def expand_macro_expression(expression: str, all_macros: dict[str, str]) -> str:
     return deduplicate_parameters(expanded)
 
 
-def cache_type_to_bytes(cache_type: str | None, default: float = 2.0) -> float:
-    """Map llama.cpp cache type names to approximate bytes per element."""
-    if not cache_type:
-        return default
+def extract_extra_fit_args(cmd: str) -> list[str]:
+    """Extract CPU-offload-related flags (-ot, --cpu-moe, --n-cpu-moe) to forward to fit-params.
 
-    normalized = cache_type.lower()
-    mapping = {
-        "f16": 2.0,
-        "fp16": 2.0,
-        "bf16": 2.0,
-        "q8_0": 1.0,
-        "q8": 1.0,
-        "q6_k": 0.75,
-        "q5_0": 0.625,
-        "q5_1": 0.625,
-        "q5_k": 0.625,
-        "q4_0": 0.5,
-        "q4_1": 0.5,
-        "q4_k": 0.5,
-    }
-    return mapping.get(normalized, default)
-
-
-def extract_cache_type_bytes(cmd: str) -> tuple[float, float]:
-    k_match = CACHE_TYPE_K_PATTERN.search(cmd)
-    v_match = CACHE_TYPE_V_PATTERN.search(cmd)
-    return (
-        cache_type_to_bytes(k_match.group(1) if k_match else None),
-        cache_type_to_bytes(v_match.group(1) if v_match else None),
-    )
-
-
-def estimate_cpu_offload_gpu_ratio(metadata, cmd: str) -> float | None:
-    """Estimate the fraction of model weights that remain on GPU after CPU offload flags."""
-    if not CPU_OFFLOAD_PATTERN.search(cmd):
-        return 1.0
-
-    expert_count = getattr(metadata, "expert_count", 0)
-    expert_ffn = getattr(metadata, "expert_feed_forward_length", 0)
-    dense_ffn = getattr(metadata, "feed_forward_length", 0)
-    shared_ffn = getattr(metadata, "expert_shared_feed_forward_length", 0)
-
-    if expert_count <= 0 or expert_ffn <= 0:
-        return None
-
-    expert_total = expert_count * expert_ffn
-    total_ffn = expert_total + dense_ffn + shared_ffn
-    if total_ffn <= 0:
-        return None
-
-    moe_weight_share = expert_total / total_ffn
-
-    if re.search(r"-ot\b[^\n]*ffn_.*_exps\.\=CPU", cmd):
-        offloaded_expert_fraction = 1.0
-    elif "--cpu-moe" in cmd and "--n-cpu-moe" not in cmd:
-        offloaded_expert_fraction = 1.0
-    else:
-        match = N_CPU_MOE_PATTERN.search(cmd)
-        if not match:
-            return None
-        offloaded_expert_fraction = min(1.0, int(match.group(1)) / expert_count)
-
-    gpu_ratio = 1.0 - (moe_weight_share * offloaded_expert_fraction)
-    return max(0.0, min(1.0, gpu_ratio))
-
-
-def is_vram_estimate_low_confidence(metadata, cmd: str) -> bool:
-    return (
-        metadata.num_layers == 0
-        or metadata.num_heads == 0
-        or metadata.num_heads_kv == 0
-        or metadata.head_dim == 0
-        or (bool(CPU_OFFLOAD_PATTERN.search(cmd)) and estimate_cpu_offload_gpu_ratio(metadata, cmd) is None)
-    )
-
-
-def build_vram_label(
-    path_model: Path,
-    cmd: str,
-    metadata_fallback_ctx: int,
-    cache: GGUFMetadataCache,
-    mmproj_path: Path | None = None,
-) -> str | None:
-    """Return a VRAM label like '[12.3 GB]', or None if estimation fails."""
-    vram_gb = estimate_vram_gib(path_model, cmd, metadata_fallback_ctx, cache, mmproj_path)
-    if vram_gb is None:
-        return None
-    try:
-        metadata = get_gguf_metadata(path_model, cache)
-        confidence_suffix = "?" if is_vram_estimate_low_confidence(metadata, cmd) else ""
-    except Exception:
-        confidence_suffix = ""
-    return f"[{vram_gb:.1f} GB{confidence_suffix}]"
+    fit-params simulates the actual model load, so passing these through directly lets it compute
+    the resulting GPU/CPU tensor split instead of us approximating it.
+    """
+    extra_args = []
+    for match in re.finditer(r"-ot\s+(\S+)", cmd):
+        extra_args += ["-ot", match.group(1)]
+    if re.search(r"--cpu-moe\b", cmd):
+        extra_args.append("--cpu-moe")
+    n_cpu_moe_match = re.search(r"--n-cpu-moe\s+(\d+)", cmd)
+    if n_cpu_moe_match:
+        extra_args += ["--n-cpu-moe", n_cpu_moe_match.group(1)]
+    return extra_args
 
 
 def estimate_vram_gib(
     path_model: Path,
     cmd: str,
     metadata_fallback_ctx: int,
-    cache: GGUFMetadataCache,
+    metadata_cache: GGUFMetadataCache,
+    fit_params_cache: FitParamsCache,
+    llama_bin: list[str] | None,
+    path_prefix_map: dict[str, str],
     mmproj_path: Path | None = None,
 ) -> float | None:
-    """Return the numeric VRAM estimate in GiB, or None if estimation fails."""
+    """Return the GPU VRAM estimate in GiB via llama.cpp fit-params, or None if estimation fails/unavailable."""
+    if not llama_bin:
+        return None
     try:
-        metadata = get_gguf_metadata(path_model, cache)
+        metadata = get_gguf_metadata(path_model, metadata_cache)
         ngl = extract_ngl(cmd)
         ctx = extract_context_length(cmd, metadata_fallback_ctx or metadata.context_length or 4096)
-        k_cache_bytes, v_cache_bytes = extract_cache_type_bytes(cmd)
-        extra_gpu_bytes = mmproj_path.stat().st_size if mmproj_path else 0
-        cpu_gpu_ratio = estimate_cpu_offload_gpu_ratio(metadata, cmd)
-        effective_file_size = path_model.stat().st_size
-        if cpu_gpu_ratio is not None:
-            effective_file_size = int(effective_file_size * cpu_gpu_ratio)
-        vram_gb = estimate_vram_gb(
-            metadata=metadata,
-            file_size_bytes=effective_file_size,
+        k_match = CACHE_TYPE_K_PATTERN.search(cmd)
+        v_match = CACHE_TYPE_V_PATTERN.search(cmd)
+        extra_args = extract_extra_fit_args(cmd)
+        extra_gpu_gib = (mmproj_path.stat().st_size / 1024**3) if mmproj_path else 0.0
+
+        vram_gib = estimate_vram_gib_via_fit_params(
+            llama_bin=llama_bin,
+            path_model=path_model,
             ngl=ngl,
-            context_length=ctx,
-            k_cache_bytes=k_cache_bytes,
-            v_cache_bytes=v_cache_bytes,
-            extra_gpu_bytes=extra_gpu_bytes,
+            ctx=ctx,
+            cache_type_k=k_match.group(1) if k_match else None,
+            cache_type_v=v_match.group(1) if v_match else None,
+            extra_args=extra_args,
+            path_prefix_map=path_prefix_map,
+            cache=fit_params_cache,
+            extra_gpu_gib=extra_gpu_gib,
         )
-        confidence_suffix = "?" if is_vram_estimate_low_confidence(metadata, cmd) else ""
-        label = f"[{vram_gb:.1f} GB{confidence_suffix}]"
-        logger.info(
-            "VRAM estimate for %s: %s (ngl=%d, ctx=%d, cache-k=%.3f, cache-v=%.3f, mmproj=%d, cpu-gpu-ratio=%s)",
-            path_model.name,
-            label,
-            ngl,
-            ctx,
-            k_cache_bytes,
-            v_cache_bytes,
-            extra_gpu_bytes,
-            f"{cpu_gpu_ratio:.3f}" if cpu_gpu_ratio is not None else "unknown",
-        )
-        return vram_gb
+        if vram_gib is not None:
+            logger.info(
+                "VRAM estimate for %s: %.1f GiB (ngl=%d, ctx=%d, mmproj=%.2f GiB)",
+                path_model.name,
+                vram_gib,
+                ngl,
+                ctx,
+                extra_gpu_gib,
+            )
+        return vram_gib
     except Exception as e:
         logger.warning("Could not estimate VRAM for %s: %s", path_model.name, e)
         return None
@@ -409,6 +334,9 @@ def build_model_metadata(
     path_model: Path,
     expanded_cmd: str,
     metadata_cache: GGUFMetadataCache | None,
+    fit_params_cache: FitParamsCache | None = None,
+    llama_bin: list[str] | None = None,
+    path_prefix_map: dict[str, str] | None = None,
     mmproj_path: Path | None = None,
     vram_estimation: bool = True,
 ) -> tuple[dict[str, Any], bool]:
@@ -423,8 +351,17 @@ def build_model_metadata(
     cache_changed = False
     if metadata_cache is not None:
         before_count = len(metadata_cache.entries)
-        if vram_estimation:
-            vram_gib = estimate_vram_gib(path_model, expanded_cmd, 0, metadata_cache, mmproj_path=mmproj_path)
+        if vram_estimation and fit_params_cache is not None:
+            vram_gib = estimate_vram_gib(
+                path_model,
+                expanded_cmd,
+                0,
+                metadata_cache,
+                fit_params_cache,
+                llama_bin,
+                path_prefix_map or {},
+                mmproj_path=mmproj_path,
+            )
             if vram_gib is not None:
                 model_metadata["estimated_vram_bytes"] = round(vram_gib * 1024**3)
         reasoning_supported = resolve_reasoning_support(path_model, metadata_cache)
@@ -598,6 +535,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
             raise ValueError(f"mmproj override error for '{key}': {exc}") from exc
 
     metadata_cache = GGUFMetadataCache.load() if settings.read_gguf_metadata else None
+    fit_params_cache = FitParamsCache.load() if settings.vram_estimation and settings.llama_bin else None
     cache_dirty = False
 
     for models_dir in settings.models_dirs:
@@ -642,6 +580,8 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 except ValueError as exc:
                     raise ValueError(f"mmproj resolution error in model pattern for '{display_name}': {exc}") from exc
 
+            runtime_model_path = apply_path_prefix_map(path_model, settings.path_prefix_map)
+
             selected_mmproj_path = select_mmproj_path_for_model(
                 model_path=path_model,
                 model_id=model_id,
@@ -651,11 +591,14 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 auto_attach=mmproj_config.auto_attach,
                 pattern_mmproj_path=pattern_mmproj_path,
             )
+            runtime_mmproj_path = (
+                apply_path_prefix_map(selected_mmproj_path, settings.path_prefix_map) if selected_mmproj_path else None
+            )
             if pattern_config.emit_base:
                 cmd = format_command_with_macro(
-                    str(path_model),
+                    runtime_model_path,
                     macro_name,
-                    mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
+                    mmproj_path=runtime_mmproj_path,
                     mmproj_arg=mmproj_config.arg,
                 )
 
@@ -666,6 +609,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     expanded_cmd,
                     metadata_cache,
                     mmproj_path=selected_mmproj_path,
+                    fit_params_cache=fit_params_cache,
+                    llama_bin=settings.llama_bin,
+                    path_prefix_map=settings.path_prefix_map,
                     vram_estimation=settings.vram_estimation,
                 )
                 if metadata_changed:
@@ -690,12 +636,15 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 )
                 if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
                     no_mmproj_id = f"{model_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
-                    no_mmproj_cmd = format_command_with_macro(str(path_model), macro_name)
+                    no_mmproj_cmd = format_command_with_macro(runtime_model_path, macro_name)
                     no_mmproj_metadata, metadata_changed = build_model_metadata(
                         display_name,
                         path_model,
                         expanded_cmd,
                         metadata_cache,
+                        fit_params_cache=fit_params_cache,
+                        llama_bin=settings.llama_bin,
+                        path_prefix_map=settings.path_prefix_map,
                         vram_estimation=settings.vram_estimation,
                     )
                     if metadata_changed:
@@ -737,9 +686,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
 
                         if variant_id not in models:
                             variant_cmd = format_command_with_macro(
-                                str(path_model),
+                                runtime_model_path,
                                 variant_macro,
-                                mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
+                                mmproj_path=runtime_mmproj_path,
                                 mmproj_arg=mmproj_config.arg,
                             )
                             variant_metadata, metadata_changed = build_model_metadata(
@@ -748,6 +697,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 expanded_variant_cmd,
                                 metadata_cache,
                                 mmproj_path=selected_mmproj_path,
+                                fit_params_cache=fit_params_cache,
+                                llama_bin=settings.llama_bin,
+                                path_prefix_map=settings.path_prefix_map,
                                 vram_estimation=settings.vram_estimation,
                             )
                             if metadata_changed:
@@ -774,12 +726,15 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 f"{variant_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
                             )
                             if no_mmproj_variant_id not in models:
-                                no_mmproj_variant_cmd = format_command_with_macro(str(path_model), variant_macro)
+                                no_mmproj_variant_cmd = format_command_with_macro(runtime_model_path, variant_macro)
                                 no_mmproj_variant_metadata, metadata_changed = build_model_metadata(
                                     display_name,
                                     path_model,
                                     expanded_variant_cmd,
                                     metadata_cache,
+                                    fit_params_cache=fit_params_cache,
+                                    llama_bin=settings.llama_bin,
+                                    path_prefix_map=settings.path_prefix_map,
                                     vram_estimation=settings.vram_estimation,
                                 )
                                 if metadata_changed:
@@ -821,9 +776,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     expanded_variant_cmd = expand_macro_expression(variant_macro, macro_config.macros)
                     if variant_id not in models:  # Avoid duplicates
                         variant_cmd = format_command_with_macro(
-                            str(path_model),
+                            runtime_model_path,
                             variant_macro,
-                            mmproj_path=str(selected_mmproj_path) if selected_mmproj_path else None,
+                            mmproj_path=runtime_mmproj_path,
                             mmproj_arg=mmproj_config.arg,
                         )
                         variant_metadata, metadata_changed = build_model_metadata(
@@ -832,6 +787,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             expanded_variant_cmd,
                             metadata_cache,
                             mmproj_path=selected_mmproj_path,
+                            fit_params_cache=fit_params_cache,
+                            llama_bin=settings.llama_bin,
+                            path_prefix_map=settings.path_prefix_map,
                             vram_estimation=settings.vram_estimation,
                         )
                         if metadata_changed:
@@ -856,12 +814,15 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     if selected_mmproj_path and mmproj_config.generate_no_mmproj_variant:
                         no_mmproj_variant_id = f"{variant_id}-{format_suffix_for_id(mmproj_config.no_mmproj_suffix)}"
                         if no_mmproj_variant_id not in models:
-                            no_mmproj_variant_cmd = format_command_with_macro(str(path_model), variant_macro)
+                            no_mmproj_variant_cmd = format_command_with_macro(runtime_model_path, variant_macro)
                             no_mmproj_variant_metadata, metadata_changed = build_model_metadata(
                                 display_name,
                                 path_model,
                                 expanded_variant_cmd,
                                 metadata_cache,
+                                fit_params_cache=fit_params_cache,
+                                llama_bin=settings.llama_bin,
+                                path_prefix_map=settings.path_prefix_map,
                                 vram_estimation=settings.vram_estimation,
                             )
                             if metadata_changed:
@@ -887,6 +848,8 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
 
     if cache_dirty and metadata_cache is not None:
         metadata_cache.save()
+    if fit_params_cache is not None:
+        fit_params_cache.save()
 
     if not models:
         raise ValueError("No models found. Please check your models directory and ensure .gguf files exist.")
@@ -1031,7 +994,7 @@ def generate_full_config(settings: Settings, config: Config) -> dict:
     # (like captureBuffer, healthCheckTimeout, logLevel, startPort) from config.model_extra
     if config.model_extra:
         for k, v in config.model_extra.items():
-            if k not in {"vram_estimation", "read_gguf_metadata", "model_labels"}:
+            if k not in {"vram_estimation", "read_gguf_metadata", "model_labels", "path_prefix_map"}:
                 output_config[k] = v
 
     # Add model configurations and collect commands simultaneously

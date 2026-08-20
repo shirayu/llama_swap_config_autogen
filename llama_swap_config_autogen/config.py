@@ -145,7 +145,7 @@ def load_macro_config(config_file: Path) -> MacroConfig:
     )
 
 
-def create_settings_from_config(config: Config, config_file: Path) -> Settings:
+def create_settings_from_config(config: Config, config_file: Path, llama_bin: list[str] | None = None) -> Settings:
     """Create Settings object from configuration."""
     return Settings(
         models_dirs=config.models,
@@ -153,4 +153,6 @@ def create_settings_from_config(config: Config, config_file: Path) -> Settings:
         config_file=config_file,
         vram_estimation=config.vram_estimation,
         read_gguf_metadata=config.vram_estimation or config.read_gguf_metadata,
+        path_prefix_map=config.path_prefix_map,
+        llama_bin=llama_bin,
     )

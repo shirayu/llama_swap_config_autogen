@@ -5,6 +5,12 @@ models:
   #   <model>/<variant>/*.gguf
   # Any .gguf outside those depths will raise an error.
 
+# Rewrites host-side model paths (as scanned under `models:`) to the path
+# seen by the runtime (e.g. inside a container) for both the generated
+# `cmd:` -m argument and any --llama-bin fit-params invocation.
+path_prefix_map:
+  /opt/data/llm/models/: /models/
+
 default_ttl: 300
 healthCheckTimeout: 240
 logLevel: warn

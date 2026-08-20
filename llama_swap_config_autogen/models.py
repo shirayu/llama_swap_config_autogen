@@ -45,6 +45,12 @@ class Config(BaseModel):
         description="Read GGUF chat_template/architecture headers to auto-derive capabilities "
         "(tools, reasoning_supported) even when vram_estimation is disabled.",
     )
+    path_prefix_map: dict[str, str] = Field(
+        default_factory=dict,
+        description="Rewrites host-side model paths (as scanned under `models:`) to the path seen by the "
+        "runtime (e.g. inside a container), applied to both the generated cmd's -m argument and any "
+        "--llama-bin fit-params invocation.",
+    )
 
 
 class VariantPresetItem(BaseModel):
@@ -75,6 +81,8 @@ class Settings(BaseModel):
     config_file: Path
     vram_estimation: bool = Field(default=False)
     read_gguf_metadata: bool = Field(default=False)
+    path_prefix_map: dict[str, str] = Field(default_factory=dict)
+    llama_bin: list[str] | None = Field(default=None)
 
 
 class MultilineLiteral(str):

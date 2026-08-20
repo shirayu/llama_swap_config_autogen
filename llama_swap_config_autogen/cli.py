@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import shlex
 import sys
 from pathlib import Path
 
@@ -91,6 +92,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable verbose logging (show VRAM estimation details)",
     )
+    generate_parser.add_argument(
+        "--llama-bin",
+        type=str,
+        default=None,
+        help="Command to run llama.cpp's fit-params tool for VRAM estimation, e.g. "
+        '"/path/to/llama" or "podman container exec llama-swap /app/llama". '
+        "Parsed with shlex. Required for vram_estimation to take effect.",
+    )
 
     # validate サブコマンド
     validate_parser = subparsers.add_parser("validate", help="Validate llama-swap YAML configuration")
@@ -129,7 +138,12 @@ def main() -> None:
         log_level = logging.DEBUG if args.verbose else logging.INFO
         logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s", stream=sys.stderr)
         config = load_config(args.config)
-        settings = create_settings_from_config(config, args.config)
+        llama_bin = shlex.split(args.llama_bin) if args.llama_bin else None
+        if config.vram_estimation and not llama_bin:
+            logging.getLogger(__name__).warning(
+                "vram_estimation is enabled but --llama-bin was not provided; skipping VRAM estimation."
+            )
+        settings = create_settings_from_config(config, args.config, llama_bin=llama_bin)
         output_config = generate_full_config(settings, config)
 
         yaml_output = yaml.dump(
