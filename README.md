@@ -67,6 +67,8 @@ Compile the human-friendly `base.yaml` rules into the machine-ready llama-swap `
 llama-swap-config-autogen generate --config base.yaml --output config.yaml
 ```
 
+Want VRAM estimates in the output? Add `--llama-bin <path-to-llama.cpp-binary>` and set `vram_estimation: true` in `base.yaml` — see [`docs/vram-estimation.md`](./docs/vram-estimation.md).
+
 Then run llama-swap:
 
 ```bash
@@ -90,42 +92,7 @@ The generator automatically discovers `.gguf` files under each entry in `models:
 
 ### 💾 Dynamic VRAM Estimation
 
-When `vram_estimation: true` is set and `generate --llama-bin` is provided, the generator invokes llama.cpp's own `fit-params --fit-print on` tool for each model (based on active GPU offload layers `-ngl`, context length `-c`, cache quantization, and CPU-offload flags resolved from your macros) and emits the resulting VRAM figure as structured model metadata:
-
-```text
-name: qwen3-30b/instruct-2507:Q4_K_M
-metadata:
-  model_family: qwen3-30b
-  estimated_vram_bytes: 20182171238
-  file_size_bytes: 18933312716
-```
-
-`--llama-bin` accepts any command that runs a `fit-params`-capable llama.cpp binary, split with `shlex`, e.g.:
-
-```sh
-llama-swap-config-autogen generate --config config.yaml --llama-bin /opt/llama.cpp/bin/llama
-# or, when llama.cpp runs inside a container:
-llama-swap-config-autogen generate --config config.yaml --llama-bin "podman container exec llama-swap /app/llama"
-```
-
-Since `fit-params` loads (without allocating) the actual model on the machine running the generator, VRAM estimation is only available there — it is skipped (with a warning) when `--llama-bin` is omitted, even if `vram_estimation: true`.
-
-If the runtime sees model files under a different path than the one scanned under `models:` (e.g. a container mount), set `path_prefix_map` in `config.yaml` to rewrite host paths to runtime paths. This applies both to the `-m` argument in generated commands and to the path passed to `fit-params`:
-
-```yaml
-path_prefix_map:
-  /opt/data/llm/models/: /models/
-```
-
-Results are locally cached under `~/.cache/llama_swap_config_autogen/fit_params_vram.json`, keyed by model file (mtime/size) plus the resolved `-ngl`/`-c`/cache-type/CPU-offload arguments, and automatically invalidated when any of those change. GGUF header metadata used for capability detection is cached separately under `~/.cache/llama_swap_config_autogen/gguf_metadata.json`.
-
-A few additional fields are auto-derived into `metadata` whenever GGUF headers are read (`vram_estimation: true`, or `read_gguf_metadata: true` if you want detection without paying for VRAM estimation):
-
-- `reasoning_supported`: `true`/`false` reflecting whether the GGUF's chat template indicates the model architecture supports reasoning/thinking mode. This describes model capability, not the reasoning mode of an individual request. Unlike `tools` (below), it is always emitted (not omitted on `false`).
-- `file_size_bytes`: the GGUF file's actual size on disk, in bytes.
-- `expert_count` / `expert_used_count`: total and active experts, emitted only for mixture-of-experts models (omitted for dense models).
-- `repo_url`: the source repository URL embedded in the GGUF (`general.repo_url` / `general.source.repo_url`), when the quantizer set it. Omitted otherwise.
-- `license`: the license name embedded in the GGUF (`general.license`), when set. Omitted otherwise.
+With `vram_estimation: true` and `generate --llama-bin <command>`, each model entry gets an `estimated_vram_bytes` figure computed by llama.cpp's own `fit-params` tool — not a hand-rolled formula — so it reflects real compute buffers, cache quantization, and CPU-offload flags:
 
 ```text
 name: qwen3-30b/instruct-2507:Q4_K_M
@@ -134,32 +101,19 @@ metadata:
   estimated_vram_bytes: 20182171238
   file_size_bytes: 18933312716
   reasoning_supported: true
-  expert_count: 128
-  expert_used_count: 8
-  repo_url: https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507
-  license: apache-2.0
 ```
 
-#### Sidecar metadata (`<model>.json`)
-
-Drop a `<model>.json` next to a GGUF (same basename, e.g. `llama3-Q4_K_M.gguf` + `llama3-Q4_K_M.json`) to hand-author or override any metadata field. Its contents are merged into `metadata` last, so they take precedence over anything auto-derived from the GGUF headers:
-
-```json
-{
-  "notes": "fine-tuned in-house, do not redistribute",
-  "license": "custom"
-}
-```
+See [**`docs/vram-estimation.md`**](./docs/vram-estimation.md) for enabling it (including containerized `--llama-bin` setups), the `path_prefix_map` option, result caching, and the full list of auto-derived metadata fields (`reasoning_supported`, `expert_count`, `repo_url`, `license`, sidecar `<model>.json` overrides).
 
 ### 📏 Model Capabilities
 
 llama-swap supports a [`capabilities`](https://github.com/mostlygeek/llama-swap/blob/main/config.example.yaml) block per model (`context`, `in`, `out`, `tools`, `reranker`) that it exposes via `/v1/models`, but this generator used to leave it out entirely — clients had no reliable way to know a model's real context length, modality, or tool-calling support (see [mostlygeek/llama-swap#999](https://github.com/mostlygeek/llama-swap/issues/999) for a client-side symptom of this same gap). Every generated model entry now gets an auto-derived `capabilities` block, so llama-swap's `/v1/models` reflects each model's real capabilities without manual configuration:
 
-- `context`: resolved from `-c`/`--ctx-size` in the expanded command (falling back to GGUF metadata when `vram_estimation: true` or `read_gguf_metadata: true`).
+- `context`: resolved from `-c`/`--ctx-size` in the expanded command, falling back to GGUF metadata.
 - `in`: `[text, image]` when an `mmproj` is attached to the entry, otherwise `[text]`.
-- `tools`: `true` when `vram_estimation: true` or `read_gguf_metadata: true` and the GGUF's chat template references tool calling; omitted otherwise.
+- `tools`: `true` when the GGUF's chat template references tool calling; omitted otherwise.
 
-Set `read_gguf_metadata: true` if you want GGUF-header-derived fields (`tools`, `metadata.reasoning_supported`, context fallback) without also paying for VRAM estimation — `vram_estimation: true` implies it.
+The GGUF-derived parts of this (context fallback, `tools`, plus `metadata.reasoning_supported`) require GGUF headers to be read, which happens automatically when `vram_estimation: true`. Set `read_gguf_metadata: true` instead if you want them without also paying for VRAM estimation.
 
 This lands directly in `config.yaml`, so clients like Open WebUI show accurate context limits and correctly gate vision/tool-calling UI per model — no hand-maintained metadata to keep in sync:
 
@@ -200,8 +154,8 @@ To keep your `base.yaml` short and free from copy-paste duplications, the tool s
 2. **Variant Presets**: Define variant templates (e.g. CPU offload) once, and bind arguments at the model pattern level using tags (`variants: [cpu, short-ctx]`).
 3. **Structured Model Metadata**: Expose model family, VRAM estimates, and modality capabilities through llama-swap metadata instead of display-name decorations.
 
-For a detailed step-by-step guide with examples, see the [**`tutorial.md`**](./tutorial.md).
-For the complete technical file format definition, see the [**`spec.md`**](./spec.md).
+For a detailed step-by-step guide with examples, see [**`docs/tutorial.md`**](./docs/tutorial.md).
+For the complete technical file format definition, see [**`docs/spec.md`**](./docs/spec.md).
 
 ### Minimal Example with Parameterized Macros
 
@@ -209,7 +163,7 @@ For the complete technical file format definition, see the [**`spec.md`**](./spe
 models:
   - /opt/data/llm/models
 
-vram_estimation: true
+vram_estimation: true # requires `generate --llama-bin <command>`, see docs/vram-estimation.md
 
 macros:
   binary: /app/llama-server
