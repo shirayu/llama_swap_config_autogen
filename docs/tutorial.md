@@ -1,6 +1,10 @@
 # Llama-Swap Config Autogen - Configuration Tutorial
 
-This tutorial guides you through the advanced configuration features of `llama-swap-config-autogen`. You will learn how to design a highly maintainable, DRY (Don't Repeat Yourself) `base.yaml` that can auto-discover dozens of GGUF models and generate a complete configuration for [llama-swap](https://github.com/mostlygeek/llama-swap).
+This tutorial picks up where the [README's Get Started](../README.md#get-started) leaves off: you've run `init` to
+get a working `base.yaml`, and now want to tailor `model_patterns` to your own models instead of relying on the
+example patterns it ships with. You will learn how to design a highly maintainable, DRY (Don't Repeat Yourself)
+`base.yaml` that can auto-discover dozens of GGUF models and generate a complete configuration for
+[llama-swap](https://github.com/mostlygeek/llama-swap).
 
 ---
 

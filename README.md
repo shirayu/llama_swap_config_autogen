@@ -56,6 +56,10 @@ Scans your model directory and writes a starter `base.yaml`. `--binary` is the `
 llama-swap-config-autogen init --model /opt/llama.cpp/models --binary /opt/llama.cpp/bin/llama-server --output base.yaml
 ```
 
+This writes a `base.yaml` with your `models:` directory already filled in, plus a working set of example `macros` and `model_patterns` (context size, GPU layers, cache quantization, ...) copied from [`template.yaml`](./llama_swap_config_autogen/template.yaml). **You can run step 3 on it as-is** — any model that doesn't match one of the example patterns just falls back to the built-in `default-params` macro, so nothing is left unconfigured.
+
+Once it's running, open `base.yaml` and adjust `model_patterns` to match your own model names/quantizations where you want different settings (context length, GPU offload, CPU offload for large MoE models, ...) — see [`docs/tutorial.md`](./docs/tutorial.md) for how patterns, macros, and variants fit together.
+
 ### 3. Generate the llama-swap config
 
 Compiles `base.yaml` into the machine-ready `config.yaml`, with `capabilities` auto-derived per model:
