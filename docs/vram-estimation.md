@@ -54,6 +54,9 @@ path_prefix_map:
   /opt/data/llm/models/: /models/
 ```
 
+See [`containerized-setup.md`](./containerized-setup.md) for the full picture of running llama.cpp/llama-swap in a
+container, including `init --binary` and how to launch llama-swap itself.
+
 ## Caching
 
 - VRAM results are cached under `~/.cache/llama_swap_config_autogen/fit_params_vram.json`, keyed by each model

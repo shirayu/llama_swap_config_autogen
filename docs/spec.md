@@ -43,6 +43,9 @@ mmproj:                              # optional
   generate_no_mmproj_variant: <bool> # default: false
   no_mmproj_suffix: <string>         # default: " (no mmproj)"
   overrides: { <model-id|display-name|filename>: <path>, ... }
+vram_estimation: <bool>              # optional, default: false
+read_gguf_metadata: <bool>           # optional, default: false
+path_prefix_map: { <host-prefix>: <runtime-prefix>, ... }  # optional, default: {}
 default_ttl: <int>                   # optional, default: 300
 healthCheckTimeout: <int>            # optional, default: 240
 logLevel: <string>                   # optional, default: info
@@ -134,6 +137,30 @@ Behavior when `enabled: true`:
 Behavior when `enabled: false`:
 
 - Legacy behavior is kept: `mmproj` files are treated like normal `.gguf` model files.
+
+### 3.7 `vram_estimation` (optional)
+
+- Type: `bool`, default `false`.
+- When `true`, GGUF headers are read for every discovered model, and `generate --llama-bin <command>` is required
+  to actually run VRAM estimation (see [`vram-estimation.md`](./vram-estimation.md)). Without
+  `--llama-bin`, estimation is skipped with a warning even when this is `true`.
+- Implies `read_gguf_metadata: true`.
+
+### 3.8 `read_gguf_metadata` (optional)
+
+- Type: `bool`, default `false`.
+- When `true`, GGUF headers are read to auto-derive `capabilities.tools`, `metadata.reasoning_supported`, and the
+  `capabilities.context` fallback, without paying for VRAM estimation.
+- Implied by `vram_estimation: true`.
+
+### 3.9 `path_prefix_map` (optional)
+
+- Type: `map[string, string]`, default `{}`.
+- Rewrites host-side model paths (as scanned under `models`) to the path the runtime sees, using the longest
+  matching key as a prefix. Applies to both the generated command's `-m`/`--mmproj` arguments and the model path
+  passed to `fit-params` during VRAM estimation.
+- Use this when the generator runs somewhere other than where `llama-server`/`fit-params` actually reads the
+  files from (e.g. a bind-mounted container path).
 
 ## 4. Macro Resolution Rules
 
