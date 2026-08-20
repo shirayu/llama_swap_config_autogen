@@ -1,9 +1,11 @@
 """YAML configuration generation logic."""
 
 import fnmatch
+import json
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from .config import load_macro_config
 from .gguf_metadata import GGUFMetadataCache, estimate_vram_gb, get_gguf_metadata
@@ -409,13 +411,13 @@ def build_model_metadata(
     metadata_cache: GGUFMetadataCache | None,
     mmproj_path: Path | None = None,
     vram_estimation: bool = True,
-) -> tuple[dict[str, str | int | bool], bool]:
+) -> tuple[dict[str, Any], bool]:
     """Build model metadata and report whether the GGUF cache changed.
 
     llama-swap wraps this config-level metadata under ``meta.llamaswap`` in
     its /v1/models response, so this function must return the inner mapping.
     """
-    model_metadata: dict[str, str | int | bool] = {
+    model_metadata: dict[str, Any] = {
         "model_family": display_name.split("/", 1)[0],
     }
     cache_changed = False
@@ -434,10 +436,34 @@ def build_model_metadata(
             if metadata.expert_count > 0:
                 model_metadata["expert_count"] = metadata.expert_count
                 model_metadata["expert_used_count"] = metadata.expert_used_count
+            if metadata.repo_url:
+                model_metadata["repo_url"] = metadata.repo_url
+            if metadata.license:
+                model_metadata["license"] = metadata.license
         except Exception as e:
             logger.warning("Could not read GGUF metadata for %s: %s", path_model.name, e)
         cache_changed = len(metadata_cache.entries) != before_count
+    model_metadata.update(load_sidecar_metadata(path_model))
     return model_metadata, cache_changed
+
+
+def load_sidecar_metadata(path_model: Path) -> dict[str, Any]:
+    """Load a user-authored `<model>.json` next to the GGUF and merge it into metadata.
+
+    The sidecar is optional and its contents fully override auto-derived fields on conflict.
+    """
+    sidecar_path = path_model.with_suffix(".json")
+    if not sidecar_path.is_file():
+        return {}
+    try:
+        data = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning("Could not read sidecar metadata %s: %s", sidecar_path, e)
+        return {}
+    if not isinstance(data, dict):
+        logger.warning("Sidecar metadata %s is not a JSON object, ignoring", sidecar_path)
+        return {}
+    return data
 
 
 def resolve_context_length(

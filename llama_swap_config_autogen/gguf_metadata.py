@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 CACHE_PATH = Path.home() / ".cache" / "llama_swap_config_autogen" / "gguf_metadata.json"
 ARCH_FALLBACKS = ["llama", "mistral", "phi3", "gemma", "qwen2"]
-CACHE_SCHEMA_VERSION = 5
+CACHE_SCHEMA_VERSION = 6
 TOOL_TEMPLATE_MARKERS = ("tool_calls", "tools")
 REASONING_TEMPLATE_MARKERS = ("enable_thinking", "reasoning_content")
 
@@ -33,6 +33,8 @@ class GGUFMetadata(BaseModel):
     expert_shared_feed_forward_length: int = 0
     supports_tools: bool = False
     supports_reasoning: bool = False
+    repo_url: str = ""
+    license: str = ""
 
 
 class GGUFMetadataCache(BaseModel):
@@ -180,6 +182,9 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         marker in get_str(key) for key in chat_template_keys for marker in REASONING_TEMPLATE_MARKERS
     )
 
+    repo_url = get_str("general.repo_url") or get_str("general.source.repo_url")
+    license_name = get_str("general.license")
+
     metadata = GGUFMetadata(
         mtime=stat.st_mtime,
         size=stat.st_size,
@@ -196,6 +201,8 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         expert_shared_feed_forward_length=expert_shared_feed_forward_length,
         supports_tools=supports_tools,
         supports_reasoning=supports_reasoning,
+        repo_url=repo_url,
+        license=license_name,
     )
 
     logger.debug(

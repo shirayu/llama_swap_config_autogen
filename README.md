@@ -107,6 +107,8 @@ A few additional fields are auto-derived into `metadata` whenever GGUF headers a
 - `reasoning_supported`: `true`/`false` reflecting whether the GGUF's chat template indicates the model architecture supports reasoning/thinking mode. This describes model capability, not the reasoning mode of an individual request. Unlike `tools` (below), it is always emitted (not omitted on `false`).
 - `file_size_bytes`: the GGUF file's actual size on disk, in bytes.
 - `expert_count` / `expert_used_count`: total and active experts, emitted only for mixture-of-experts models (omitted for dense models).
+- `repo_url`: the source repository URL embedded in the GGUF (`general.repo_url` / `general.source.repo_url`), when the quantizer set it. Omitted otherwise.
+- `license`: the license name embedded in the GGUF (`general.license`), when set. Omitted otherwise.
 
 ```text
 name: qwen3-30b/instruct-2507:Q4_K_M
@@ -117,6 +119,19 @@ metadata:
   reasoning_supported: true
   expert_count: 128
   expert_used_count: 8
+  repo_url: https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507
+  license: apache-2.0
+```
+
+#### Sidecar metadata (`<model>.json`)
+
+Drop a `<model>.json` next to a GGUF (same basename, e.g. `llama3-Q4_K_M.gguf` + `llama3-Q4_K_M.json`) to hand-author or override any metadata field. Its contents are merged into `metadata` last, so they take precedence over anything auto-derived from the GGUF headers:
+
+```json
+{
+  "notes": "fine-tuned in-house, do not redistribute",
+  "license": "custom"
+}
 ```
 
 ### 📏 Model Capabilities

@@ -43,6 +43,8 @@ def _make_metadata(
     expert_feed_forward_length: int = 0,
     expert_shared_feed_forward_length: int = 0,
     supports_reasoning: bool = False,
+    repo_url: str = "",
+    license: str = "",
 ) -> GGUFMetadata:
     return GGUFMetadata(
         mtime=mtime,
@@ -59,6 +61,8 @@ def _make_metadata(
         expert_feed_forward_length=expert_feed_forward_length,
         expert_shared_feed_forward_length=expert_shared_feed_forward_length,
         supports_reasoning=supports_reasoning,
+        repo_url=repo_url,
+        license=license,
     )
 
 
@@ -781,6 +785,76 @@ class TestVramMetadataInGeneratedConfig:
         model = result["models"]["qwen3-30b:Q4_K_M"]
         assert model["metadata"]["expert_count"] == 128
         assert model["metadata"]["expert_used_count"] == 8
+
+    def test_model_metadata_includes_repo_url_and_license(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "llama3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "llama3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, models_dir)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+
+        def fake_get_metadata(path, cache):
+            stat = path.stat()
+            return _make_metadata(
+                mtime=stat.st_mtime,
+                size=stat.st_size,
+                repo_url="https://huggingface.co/example/llama3",
+                license="apache-2.0",
+            )
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=fake_get_metadata):
+            result = generate_full_config(settings, config)
+
+        model = result["models"]["llama3:Q4_K_M"]
+        assert model["metadata"]["repo_url"] == "https://huggingface.co/example/llama3"
+        assert model["metadata"]["license"] == "apache-2.0"
+
+    def test_model_metadata_omits_repo_url_and_license_when_absent(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "llama3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "llama3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, models_dir)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+
+        with patch("llama_swap_config_autogen.generator.get_gguf_metadata", side_effect=self._fake_get_metadata):
+            result = generate_full_config(settings, config)
+
+        model = result["models"]["llama3:Q4_K_M"]
+        assert "repo_url" not in model["metadata"]
+        assert "license" not in model["metadata"]
+
+    def test_sidecar_json_merges_into_metadata(self, tmp_path):
+        models_dir = tmp_path / "models"
+        model_dir = models_dir / "llama3"
+        model_dir.mkdir(parents=True)
+        model_file = model_dir / "llama3-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00" * 1024)
+        sidecar_file = model_dir / "llama3-Q4_K_M.json"
+        sidecar_file.write_text('{"notes": "hand curated", "model_family": "custom-family"}', encoding="utf-8")
+
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, models_dir, vram_estimation=False)
+
+        config = load_config(config_path)
+        settings = create_settings_from_config(config, config_path)
+
+        result = generate_full_config(settings, config)
+
+        model = result["models"]["llama3:Q4_K_M"]
+        assert model["metadata"]["notes"] == "hand curated"
+        assert model["metadata"]["model_family"] == "custom-family"
 
     def test_model_metadata_omits_vram_when_disabled(self, tmp_path):
         models_dir = tmp_path / "models"

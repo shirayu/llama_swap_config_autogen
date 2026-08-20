@@ -206,6 +206,11 @@ quantization suffix for model ID generation.
   read (`vram_estimation: true` or `read_gguf_metadata: true`).
 - `metadata.expert_count` / `metadata.expert_used_count` -> total and active expert counts from the GGUF headers,
   emitted only for mixture-of-experts models (omitted for dense models).
+- `metadata.repo_url` -> source repository URL from the GGUF's `general.repo_url` /
+  `general.source.repo_url` headers, when the quantizer set it. Omitted otherwise.
+- `metadata.license` -> license name from the GGUF's `general.license` header, when set. Omitted otherwise.
+- `metadata` is finally merged with the contents of a user-authored `<model>.json` sidecar file next to the GGUF
+  (same basename), when present. The sidecar's keys take precedence over any auto-derived fields.
 
 Audio models should declare their modalities explicitly in `model_patterns`, for example `in: [audio]` for speech
 recognition or `out: [audio]` for text-to-speech models.
