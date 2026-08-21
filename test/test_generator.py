@@ -416,6 +416,7 @@ class TestBuildCapabilities:
 
         capabilities = build_capabilities("default-params", MacroConfig(), model_file, None, None, mmproj_path=None)
 
+        assert capabilities is not None
         assert capabilities.in_ == ["text"]
 
     def test_vision_mmproj_yields_image(self, tmp_path):
@@ -432,6 +433,7 @@ class TestBuildCapabilities:
                 "default-params", MacroConfig(), model_file, None, None, mmproj_path=mmproj_file
             )
 
+        assert capabilities is not None
         assert capabilities.in_ == ["text", "image"]
 
     def test_audio_mmproj_yields_audio_not_image(self, tmp_path):
@@ -448,6 +450,7 @@ class TestBuildCapabilities:
                 "default-params", MacroConfig(), model_file, None, None, mmproj_path=mmproj_file
             )
 
+        assert capabilities is not None
         assert capabilities.in_ == ["text", "audio"]
 
     def test_vision_and_audio_mmproj_yields_both(self, tmp_path):
@@ -464,6 +467,7 @@ class TestBuildCapabilities:
                 "default-params", MacroConfig(), model_file, None, None, mmproj_path=mmproj_file
             )
 
+        assert capabilities is not None
         assert capabilities.in_ == ["text", "image", "audio"]
 
     def test_mmproj_without_modality_metadata_falls_back_to_image(self, tmp_path):
@@ -480,4 +484,5 @@ class TestBuildCapabilities:
                 "default-params", MacroConfig(), model_file, None, None, mmproj_path=mmproj_file
             )
 
+        assert capabilities is not None
         assert capabilities.in_ == ["text", "image"]
