@@ -22,12 +22,7 @@ def _make_metadata(mtime: float = 0.0, size: int = 1024, context_length: int = 4
     return GGUFMetadata(
         mtime=mtime,
         size=size,
-        num_layers=32,
-        num_heads=32,
-        num_heads_kv=8,
-        head_dim=128,
         context_length=context_length,
-        embedding_length=4096,
     )
 
 

@@ -263,12 +263,7 @@ def test_tools_detected_from_gguf_chat_template(tmp_path: Path, monkeypatch):
         return GGUFMetadata(
             mtime=0,
             size=0,
-            num_layers=1,
-            num_heads=1,
-            num_heads_kv=1,
-            head_dim=1,
             context_length=32768,
-            embedding_length=1,
             supports_tools=True,
         )
 
@@ -313,12 +308,7 @@ def test_user_specified_tools_overrides_auto_derived_tools(tmp_path: Path, monke
         return GGUFMetadata(
             mtime=0,
             size=0,
-            num_layers=1,
-            num_heads=1,
-            num_heads_kv=1,
-            head_dim=1,
             context_length=32768,
-            embedding_length=1,
             supports_tools=True,
         )
 

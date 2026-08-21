@@ -17,18 +17,9 @@ from llama_swap_config_autogen.gguf_metadata import (
 def _make_metadata(
     mtime: float = 0.0,
     size: int = 4 * 1024**3,
-    num_layers: int = 32,
-    num_heads: int = 32,
-    num_heads_kv: int = 8,
-    head_dim: int = 128,
     context_length: int = 4096,
-    embedding_length: int = 4096,
     expert_count: int = 0,
     expert_used_count: int = 0,
-    feed_forward_length: int = 0,
-    expert_feed_forward_length: int = 0,
-    expert_shared_feed_forward_length: int = 0,
-    full_attention_interval: int = 0,
     supports_reasoning: bool = False,
     repo_url: str = "",
     license: str = "",
@@ -36,18 +27,9 @@ def _make_metadata(
     return GGUFMetadata(
         mtime=mtime,
         size=size,
-        num_layers=num_layers,
-        num_heads=num_heads,
-        num_heads_kv=num_heads_kv,
-        head_dim=head_dim,
         context_length=context_length,
-        embedding_length=embedding_length,
         expert_count=expert_count,
         expert_used_count=expert_used_count,
-        feed_forward_length=feed_forward_length,
-        expert_feed_forward_length=expert_feed_forward_length,
-        expert_shared_feed_forward_length=expert_shared_feed_forward_length,
-        full_attention_interval=full_attention_interval,
         supports_reasoning=supports_reasoning,
         repo_url=repo_url,
         license=license,
@@ -99,7 +81,7 @@ class TestGGUFMetadataCache:
         model = tmp_path / "model.gguf"
         model.write_bytes(b"\x00" * 100)
         stat = model.stat()
-        meta = _make_metadata(mtime=stat.st_mtime, size=stat.st_size, num_layers=42)
+        meta = _make_metadata(mtime=stat.st_mtime, size=stat.st_size, context_length=131072)
 
         cache = GGUFMetadataCache()
         cache.set(model, meta)
@@ -109,7 +91,7 @@ class TestGGUFMetadataCache:
             loaded = GGUFMetadataCache.load()
 
         assert str(model) in loaded.entries
-        assert loaded.entries[str(model)].num_layers == 42
+        assert loaded.entries[str(model)].context_length == 131072
 
     def test_load_ignores_corrupt_cache(self, tmp_path):
         cache_file = tmp_path / "cache.json"
@@ -144,12 +126,7 @@ class TestReadGgufMetadata:
         with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
             meta = _read_gguf_metadata(model)
 
-        assert meta.num_layers == 32
-        assert meta.num_heads == 32
-        assert meta.num_heads_kv == 8
-        assert meta.embedding_length == 4096
         assert meta.context_length == 131072
-        assert meta.head_dim == 128
 
     def test_detects_reasoning_support_from_chat_template(self, tmp_path):
         model = tmp_path / "model.gguf"
@@ -232,70 +209,7 @@ class TestReadGgufMetadata:
         with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
             meta = _read_gguf_metadata(model)
 
-        assert meta.num_layers == 48
-        assert meta.num_heads == 40
-        assert meta.num_heads_kv == 8
-        assert meta.embedding_length == 5120
         assert meta.context_length == 40960
-
-    def test_prefers_explicit_key_length_over_derived_head_dim(self, tmp_path):
-        model = tmp_path / "model.gguf"
-        model.write_bytes(b"\x00")
-
-        class FakeField:
-            def __init__(self, name, value):
-                self.name = name
-                self._value = value
-
-            def contents(self, index_or_slice=0):
-                return self._value
-
-        # embedding_length // head_count would give 213, but the GGUF explicitly
-        # states a head_dim of 256 (as seen on hybrid SSM/attention Qwen3.5 models).
-        fake_fields = {
-            "qwen35.block_count": FakeField("qwen35.block_count", [65]),
-            "qwen35.attention.head_count": FakeField("qwen35.attention.head_count", [24]),
-            "qwen35.attention.head_count_kv": FakeField("qwen35.attention.head_count_kv", [4]),
-            "qwen35.attention.key_length": FakeField("qwen35.attention.key_length", [256]),
-            "qwen35.embedding_length": FakeField("qwen35.embedding_length", [5120]),
-            "qwen35.context_length": FakeField("qwen35.context_length", [262144]),
-            "qwen35.full_attention_interval": FakeField("qwen35.full_attention_interval", [4]),
-        }
-        fake_reader = SimpleNamespace(fields=fake_fields)
-
-        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
-            meta = _read_gguf_metadata(model)
-
-        assert meta.head_dim == 256
-        assert meta.full_attention_interval == 4
-
-    def test_falls_back_to_derived_head_dim_without_key_length(self, tmp_path):
-        model = tmp_path / "model.gguf"
-        model.write_bytes(b"\x00")
-
-        class FakeField:
-            def __init__(self, name, value):
-                self.name = name
-                self._value = value
-
-            def contents(self, index_or_slice=0):
-                return self._value
-
-        fake_fields = {
-            "qwen2.block_count": FakeField("qwen2.block_count", [32]),
-            "qwen2.attention.head_count": FakeField("qwen2.attention.head_count", [32]),
-            "qwen2.attention.head_count_kv": FakeField("qwen2.attention.head_count_kv", [8]),
-            "qwen2.embedding_length": FakeField("qwen2.embedding_length", [4096]),
-            "qwen2.context_length": FakeField("qwen2.context_length", [131072]),
-        }
-        fake_reader = SimpleNamespace(fields=fake_fields)
-
-        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
-            meta = _read_gguf_metadata(model)
-
-        assert meta.head_dim == 128
-        assert meta.full_attention_interval == 0
-        assert meta.head_dim == 128
 
     def test_load_returns_empty_when_no_file(self, tmp_path):
         cache_file = tmp_path / "missing.json"

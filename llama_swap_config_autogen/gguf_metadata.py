@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 CACHE_PATH = Path.home() / ".cache" / "llama_swap_config_autogen" / "gguf_metadata.json"
 ARCH_FALLBACKS = ["llama", "mistral", "phi3", "gemma", "qwen2"]
-CACHE_SCHEMA_VERSION = 7
+CACHE_SCHEMA_VERSION = 8
 TOOL_TEMPLATE_MARKERS = ("tool_calls", "tools")
 REASONING_TEMPLATE_MARKERS = ("enable_thinking", "reasoning_content")
 
@@ -20,18 +20,9 @@ REASONING_TEMPLATE_MARKERS = ("enable_thinking", "reasoning_content")
 class GGUFMetadata(BaseModel):
     mtime: float
     size: int
-    num_layers: int
-    num_heads: int
-    num_heads_kv: int
-    head_dim: int
     context_length: int
-    embedding_length: int
     expert_count: int = 0
     expert_used_count: int = 0
-    feed_forward_length: int = 0
-    expert_feed_forward_length: int = 0
-    expert_shared_feed_forward_length: int = 0
-    full_attention_interval: int = 0
     supports_tools: bool = False
     supports_reasoning: bool = False
     repo_url: str = ""
@@ -149,39 +140,10 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
     archs = discover_arch_prefixes()
     logger.debug("Detected GGUF architecture candidates for %s: %s", path.name, archs)
     num_layers = next((get_int(f"{a}.block_count") for a in archs if get_int(f"{a}.block_count")), 0)
-    num_heads = next((get_int(f"{a}.attention.head_count") for a in archs if get_int(f"{a}.attention.head_count")), 0)
-    num_heads_kv = next(
-        (get_int(f"{a}.attention.head_count_kv") for a in archs if get_int(f"{a}.attention.head_count_kv")),
-        num_heads,
-    )
     embedding_length = next((get_int(f"{a}.embedding_length") for a in archs if get_int(f"{a}.embedding_length")), 0)
     context_length = next((get_int(f"{a}.context_length") for a in archs if get_int(f"{a}.context_length")), 0)
     expert_count = next((get_int(f"{a}.expert_count") for a in archs if get_int(f"{a}.expert_count")), 0)
     expert_used_count = next((get_int(f"{a}.expert_used_count") for a in archs if get_int(f"{a}.expert_used_count")), 0)
-    feed_forward_length = next(
-        (get_int(f"{a}.feed_forward_length") for a in archs if get_int(f"{a}.feed_forward_length")),
-        0,
-    )
-    expert_feed_forward_length = next(
-        (get_int(f"{a}.expert_feed_forward_length") for a in archs if get_int(f"{a}.expert_feed_forward_length")),
-        0,
-    )
-    expert_shared_feed_forward_length = next(
-        (
-            get_int(f"{a}.expert_shared_feed_forward_length")
-            for a in archs
-            if get_int(f"{a}.expert_shared_feed_forward_length")
-        ),
-        0,
-    )
-
-    head_dim = next((get_int(f"{a}.attention.key_length") for a in archs if get_int(f"{a}.attention.key_length")), 0)
-    if head_dim == 0:
-        head_dim = (embedding_length // num_heads) if num_heads > 0 else 0
-    full_attention_interval = next(
-        (get_int(f"{a}.full_attention_interval") for a in archs if get_int(f"{a}.full_attention_interval")),
-        0,
-    )
 
     chat_template_keys = [key for key in kv if key.startswith("tokenizer.chat_template")]
     supports_tools = any(marker in get_str(key) for key in chat_template_keys for marker in TOOL_TEMPLATE_MARKERS)
@@ -195,18 +157,9 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
     metadata = GGUFMetadata(
         mtime=stat.st_mtime,
         size=stat.st_size,
-        num_layers=num_layers,
-        num_heads=num_heads,
-        num_heads_kv=num_heads_kv,
-        head_dim=head_dim,
         context_length=context_length,
-        embedding_length=embedding_length,
         expert_count=expert_count,
         expert_used_count=expert_used_count,
-        feed_forward_length=feed_forward_length,
-        expert_feed_forward_length=expert_feed_forward_length,
-        expert_shared_feed_forward_length=expert_shared_feed_forward_length,
-        full_attention_interval=full_attention_interval,
         supports_tools=supports_tools,
         supports_reasoning=supports_reasoning,
         repo_url=repo_url,
@@ -214,11 +167,8 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
     )
 
     logger.debug(
-        "  layers=%d, heads=%d, heads_kv=%d, head_dim=%d, ctx=%d, emb=%d, experts=%d, used=%d",
+        "  layers=%d, ctx=%d, emb=%d, experts=%d, used=%d",
         num_layers,
-        num_heads,
-        num_heads_kv,
-        head_dim,
         context_length,
         embedding_length,
         expert_count,
