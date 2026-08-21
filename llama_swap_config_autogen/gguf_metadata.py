@@ -202,6 +202,7 @@ def get_gguf_metadata(path: Path, cache: GGUFMetadataCache) -> GGUFMetadata:
 class MmprojModalities(BaseModel):
     has_vision: bool = False
     has_audio: bool = False
+    projector_type: str = ""
 
 
 def read_mmproj_modalities(path: Path) -> MmprojModalities:
@@ -211,6 +212,8 @@ def read_mmproj_modalities(path: Path) -> MmprojModalities:
     booleans in the mmproj GGUF header; these are independent of the "mmproj"
     filename convention and let a single mmproj file be correctly attributed
     to image vs. audio input support (e.g. Ultravox, Qwen2-Audio mmproj files).
+    clip.projector_type identifies the specific projector implementation
+    (e.g. "ultravox", "qwen2vl").
     """
     try:
         reader = GGUFReader(str(path), "r")
@@ -233,7 +236,19 @@ def read_mmproj_modalities(path: Path) -> MmprojModalities:
             logger.debug("Failed to coerce GGUF field %s to bool", key, exc_info=True)
             return False
 
+    def get_str(key: str) -> str:
+        field = kv.get(key)
+        if field is None:
+            return ""
+        try:
+            value = field.contents()
+            return value if isinstance(value, str) else ""
+        except Exception:
+            logger.debug("Failed to read GGUF field %s as string", key, exc_info=True)
+            return ""
+
     return MmprojModalities(
         has_vision=get_bool("clip.has_vision_encoder"),
         has_audio=get_bool("clip.has_audio_encoder"),
+        projector_type=get_str("clip.projector_type"),
     )

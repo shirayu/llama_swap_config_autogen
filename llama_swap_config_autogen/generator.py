@@ -380,6 +380,10 @@ def build_model_metadata(
         except Exception as e:
             logger.warning("Could not read GGUF metadata for %s: %s", path_model.name, e)
         cache_changed = len(metadata_cache.entries) != before_count
+    if mmproj_path is not None:
+        projector_type = read_mmproj_modalities(mmproj_path).projector_type
+        if projector_type:
+            model_metadata["mmproj_projector_type"] = projector_type
     model_metadata.update(load_sidecar_metadata(path_model))
     return model_metadata, cache_changed
 

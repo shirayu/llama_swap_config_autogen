@@ -285,3 +285,37 @@ class TestReadMmprojModalities:
         modalities = read_mmproj_modalities(missing)
         assert modalities.has_vision is False
         assert modalities.has_audio is False
+
+    def test_reads_projector_type(self, tmp_path):
+        mmproj = tmp_path / "mmproj-ultravox-F16.gguf"
+        mmproj.write_bytes(b"\x00")
+
+        class FakeField:
+            def __init__(self, name, value):
+                self.name = name
+                self._value = value
+
+            def contents(self, index_or_slice=0):
+                return self._value
+
+        fake_fields = {
+            "clip.has_audio_encoder": FakeField("clip.has_audio_encoder", [True]),
+            "clip.projector_type": FakeField("clip.projector_type", "ultravox"),
+        }
+        fake_reader = SimpleNamespace(fields=fake_fields)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            modalities = read_mmproj_modalities(mmproj)
+
+        assert modalities.projector_type == "ultravox"
+
+    def test_projector_type_defaults_to_empty_string(self, tmp_path):
+        mmproj = tmp_path / "mmproj-F16.gguf"
+        mmproj.write_bytes(b"\x00")
+
+        fake_reader = SimpleNamespace(fields={})
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            modalities = read_mmproj_modalities(mmproj)
+
+        assert modalities.projector_type == ""

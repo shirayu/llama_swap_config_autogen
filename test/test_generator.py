@@ -182,6 +182,42 @@ class TestBuildModelMetadata:
 
         assert "estimated_vram_bytes" not in metadata
 
+    def test_includes_mmproj_projector_type_when_mmproj_attached(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 100)
+        mmproj = tmp_path / "mmproj-ultravox-F16.gguf"
+        mmproj.write_bytes(b"\x00")
+
+        with patch(
+            "llama_swap_config_autogen.generator.read_mmproj_modalities",
+            return_value=MmprojModalities(has_audio=True, projector_type="ultravox"),
+        ):
+            metadata, _ = build_model_metadata(
+                "model",
+                model,
+                "-ngl 99 -c 4096",
+                None,
+                mmproj_path=mmproj,
+                vram_estimation=False,
+            )
+
+        assert metadata["mmproj_projector_type"] == "ultravox"
+
+    def test_omits_mmproj_projector_type_without_mmproj(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 100)
+
+        metadata, _ = build_model_metadata(
+            "model",
+            model,
+            "-ngl 99 -c 4096",
+            None,
+            mmproj_path=None,
+            vram_estimation=False,
+        )
+
+        assert "mmproj_projector_type" not in metadata
+
 
 # ---------------------------------------------------------------------------
 # Integration: generate_full_config

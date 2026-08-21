@@ -237,6 +237,8 @@ quantization suffix for model ID generation.
 - `metadata.repo_url` -> source repository URL from the GGUF's `general.repo_url` /
   `general.source.repo_url` headers, when the quantizer set it. Omitted otherwise.
 - `metadata.license` -> license name from the GGUF's `general.license` header, when set. Omitted otherwise.
+- `metadata.mmproj_projector_type` -> the attached mmproj's `clip.projector_type` (e.g. `ultravox`, `qwen2vl`),
+  when an `mmproj` is attached and the field is set. Omitted otherwise.
 - `metadata` is finally merged with the contents of a user-authored `<model>.json` sidecar file next to the GGUF
   (same basename), when present. The sidecar's keys take precedence over any auto-derived fields.
 
