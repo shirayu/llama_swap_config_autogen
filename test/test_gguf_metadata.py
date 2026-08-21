@@ -7,6 +7,7 @@ from llama_swap_config_autogen.gguf_metadata import (
     GGUFMetadata,
     GGUFMetadataCache,
     _read_gguf_metadata,
+    read_mmproj_modalities,
 )
 
 # ---------------------------------------------------------------------------
@@ -216,3 +217,71 @@ class TestReadGgufMetadata:
         with patch("llama_swap_config_autogen.gguf_metadata.CACHE_PATH", cache_file):
             cache = GGUFMetadataCache.load()
         assert cache.entries == {}
+
+
+class TestReadMmprojModalities:
+    def test_detects_vision_encoder(self, tmp_path):
+        mmproj = tmp_path / "mmproj-F16.gguf"
+        mmproj.write_bytes(b"\x00")
+
+        class FakeField:
+            def __init__(self, name, value):
+                self.name = name
+                self._value = value
+
+            def contents(self, index_or_slice=0):
+                return self._value
+
+        fake_fields = {
+            "clip.has_vision_encoder": FakeField("clip.has_vision_encoder", [True]),
+            "clip.has_audio_encoder": FakeField("clip.has_audio_encoder", [False]),
+        }
+        fake_reader = SimpleNamespace(fields=fake_fields)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            modalities = read_mmproj_modalities(mmproj)
+
+        assert modalities.has_vision is True
+        assert modalities.has_audio is False
+
+    def test_detects_audio_encoder(self, tmp_path):
+        mmproj = tmp_path / "mmproj-ultravox-F16.gguf"
+        mmproj.write_bytes(b"\x00")
+
+        class FakeField:
+            def __init__(self, name, value):
+                self.name = name
+                self._value = value
+
+            def contents(self, index_or_slice=0):
+                return self._value
+
+        fake_fields = {
+            "clip.has_vision_encoder": FakeField("clip.has_vision_encoder", [False]),
+            "clip.has_audio_encoder": FakeField("clip.has_audio_encoder", [True]),
+        }
+        fake_reader = SimpleNamespace(fields=fake_fields)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            modalities = read_mmproj_modalities(mmproj)
+
+        assert modalities.has_vision is False
+        assert modalities.has_audio is True
+
+    def test_defaults_to_false_when_keys_missing(self, tmp_path):
+        mmproj = tmp_path / "mmproj-F16.gguf"
+        mmproj.write_bytes(b"\x00")
+
+        fake_reader = SimpleNamespace(fields={})
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            modalities = read_mmproj_modalities(mmproj)
+
+        assert modalities.has_vision is False
+        assert modalities.has_audio is False
+
+    def test_returns_defaults_when_file_cannot_be_opened(self, tmp_path):
+        missing = tmp_path / "does-not-exist.gguf"
+        modalities = read_mmproj_modalities(missing)
+        assert modalities.has_vision is False
+        assert modalities.has_audio is False

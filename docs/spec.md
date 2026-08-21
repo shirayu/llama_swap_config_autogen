@@ -221,7 +221,8 @@ quantization suffix for model ID generation.
   its auto-derived value:
     - `context` -> the expanded command's `-c`/`--ctx-size` value (falls back to GGUF metadata `context_length`
       when `vram_estimation: true` and no explicit `-c`/`--ctx-size` is set). Omitted if neither is available.
-    - `in` -> `[text, image]` when an `mmproj` is attached to the entry, otherwise `[text]`. Always emitted.
+    - `in` -> `[text]`, plus `image` and/or `audio` when an `mmproj` is attached, based on that mmproj GGUF's
+      `clip.has_vision_encoder` / `clip.has_audio_encoder` metadata. Always emitted.
     - `tools` -> `true` when `vram_estimation: true` and the GGUF's `tokenizer.chat_template` metadata
       references tool calling (`tools`/`tool_calls`); otherwise omitted unless set explicitly.
     - `out`, `reranker` -> emitted only when explicitly set in `model_patterns` (no auto-derivation).
@@ -239,8 +240,9 @@ quantization suffix for model ID generation.
 - `metadata` is finally merged with the contents of a user-authored `<model>.json` sidecar file next to the GGUF
   (same basename), when present. The sidecar's keys take precedence over any auto-derived fields.
 
-Audio models should declare their modalities explicitly in `model_patterns`, for example `in: [audio]` for speech
-recognition or `out: [audio]` for text-to-speech models.
+Standalone speech models that don't go through an `mmproj` (e.g. a bare whisper.cpp GGUF) should declare their
+modalities explicitly in `model_patterns`, for example `in: [audio]` for speech recognition or `out: [audio]` for
+text-to-speech models.
 
 ## 7. Recommended Authoring Rules
 

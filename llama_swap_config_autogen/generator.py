@@ -9,7 +9,7 @@ from typing import Any
 
 from .config import load_macro_config
 from .fit_params import FitParamsCache, apply_path_prefix_map, estimate_vram_gib_via_fit_params
-from .gguf_metadata import GGUFMetadataCache, get_gguf_metadata
+from .gguf_metadata import GGUFMetadataCache, get_gguf_metadata, read_mmproj_modalities
 from .models import (
     CapabilitiesConfig,
     Config,
@@ -475,16 +475,25 @@ def build_capabilities(
     path_model: Path,
     metadata_cache: GGUFMetadataCache | None,
     user_capabilities: CapabilitiesConfig | None,
-    has_mmproj: bool = False,
+    mmproj_path: Path | None = None,
 ) -> CapabilitiesConfig | None:
     """Build capabilities for a model entry: auto-derived fields merged with user-specified fields.
 
     Auto-derived: context (from -c/--ctx-size or GGUF metadata), tools (from GGUF chat_template),
-    in (text, plus image when an mmproj is attached).
+    in (text, plus image/audio depending on the attached mmproj's clip.has_vision_encoder /
+    clip.has_audio_encoder metadata).
     """
     context = resolve_context_length(macro_expr, macro_config, path_model, metadata_cache)
     tools = resolve_tool_support(path_model, metadata_cache)
-    auto_in = ["text", "image"] if has_mmproj else ["text"]
+    auto_in = ["text"]
+    if mmproj_path is not None:
+        modalities = read_mmproj_modalities(mmproj_path)
+        if modalities.has_vision:
+            auto_in.append("image")
+        if modalities.has_audio:
+            auto_in.append("audio")
+        if not modalities.has_vision and not modalities.has_audio:
+            auto_in.append("image")
 
     merged = user_capabilities.model_copy() if user_capabilities is not None else CapabilitiesConfig()
     if merged.context is None and context is not None:
@@ -623,7 +632,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     path_model,
                     metadata_cache,
                     pattern_config.capabilities,
-                    has_mmproj=selected_mmproj_path is not None,
+                    mmproj_path=selected_mmproj_path,
                 )
 
                 ensure_unique_model_name(full_name, model_id, name_to_id)
@@ -657,7 +666,6 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         path_model,
                         metadata_cache,
                         pattern_config.capabilities,
-                        has_mmproj=False,
                     )
                     ensure_unique_model_name(no_mmproj_name, no_mmproj_id, name_to_id)
                     models[no_mmproj_id] = YamlModelConfig(
@@ -711,7 +719,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 path_model,
                                 metadata_cache,
                                 pattern_config.capabilities,
-                                has_mmproj=selected_mmproj_path is not None,
+                                mmproj_path=selected_mmproj_path,
                             )
                             ensure_unique_model_name(variant_full_name, variant_id, name_to_id)
                             models[variant_id] = YamlModelConfig(
@@ -747,7 +755,6 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                     path_model,
                                     metadata_cache,
                                     pattern_config.capabilities,
-                                    has_mmproj=False,
                                 )
                                 ensure_unique_model_name(no_mmproj_variant_name, no_mmproj_variant_id, name_to_id)
                                 models[no_mmproj_variant_id] = YamlModelConfig(
@@ -801,7 +808,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             path_model,
                             metadata_cache,
                             pattern_config.capabilities,
-                            has_mmproj=selected_mmproj_path is not None,
+                            mmproj_path=selected_mmproj_path,
                         )
                         ensure_unique_model_name(variant_full_name, variant_id, name_to_id)
                         models[variant_id] = YamlModelConfig(
@@ -835,7 +842,6 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 path_model,
                                 metadata_cache,
                                 pattern_config.capabilities,
-                                has_mmproj=False,
                             )
                             ensure_unique_model_name(no_mmproj_variant_name, no_mmproj_variant_id, name_to_id)
                             models[no_mmproj_variant_id] = YamlModelConfig(

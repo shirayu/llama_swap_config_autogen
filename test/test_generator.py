@@ -8,6 +8,7 @@ import yaml
 from llama_swap_config_autogen.config import create_settings_from_config, load_config
 from llama_swap_config_autogen.fit_params import FitParamsCache
 from llama_swap_config_autogen.generator import (
+    build_capabilities,
     build_model_metadata,
     estimate_vram_gib,
     extract_context_length,
@@ -15,7 +16,8 @@ from llama_swap_config_autogen.generator import (
     extract_ngl,
     generate_full_config,
 )
-from llama_swap_config_autogen.gguf_metadata import GGUFMetadata, GGUFMetadataCache
+from llama_swap_config_autogen.gguf_metadata import GGUFMetadata, GGUFMetadataCache, MmprojModalities
+from llama_swap_config_autogen.models import MacroConfig
 
 
 def _make_metadata(mtime: float = 0.0, size: int = 1024, context_length: int = 4096) -> GGUFMetadata:
@@ -369,3 +371,77 @@ class TestGenerateFullConfigIntegration:
         model = result["models"]["llama3:Q4_K_M"]
         assert model["metadata"]["notes"] == "hand curated"
         assert model["metadata"]["model_family"] == "custom-family"
+
+
+class TestBuildCapabilities:
+    def test_no_mmproj_yields_text_only(self, tmp_path):
+        model_file = tmp_path / "model-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00")
+
+        capabilities = build_capabilities("default-params", MacroConfig(), model_file, None, None, mmproj_path=None)
+
+        assert capabilities.in_ == ["text"]
+
+    def test_vision_mmproj_yields_image(self, tmp_path):
+        model_file = tmp_path / "model-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00")
+        mmproj_file = tmp_path / "mmproj-F16.gguf"
+        mmproj_file.write_bytes(b"\x00")
+
+        with patch(
+            "llama_swap_config_autogen.generator.read_mmproj_modalities",
+            return_value=MmprojModalities(has_vision=True, has_audio=False),
+        ):
+            capabilities = build_capabilities(
+                "default-params", MacroConfig(), model_file, None, None, mmproj_path=mmproj_file
+            )
+
+        assert capabilities.in_ == ["text", "image"]
+
+    def test_audio_mmproj_yields_audio_not_image(self, tmp_path):
+        model_file = tmp_path / "model-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00")
+        mmproj_file = tmp_path / "mmproj-ultravox-F16.gguf"
+        mmproj_file.write_bytes(b"\x00")
+
+        with patch(
+            "llama_swap_config_autogen.generator.read_mmproj_modalities",
+            return_value=MmprojModalities(has_vision=False, has_audio=True),
+        ):
+            capabilities = build_capabilities(
+                "default-params", MacroConfig(), model_file, None, None, mmproj_path=mmproj_file
+            )
+
+        assert capabilities.in_ == ["text", "audio"]
+
+    def test_vision_and_audio_mmproj_yields_both(self, tmp_path):
+        model_file = tmp_path / "model-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00")
+        mmproj_file = tmp_path / "mmproj-F16.gguf"
+        mmproj_file.write_bytes(b"\x00")
+
+        with patch(
+            "llama_swap_config_autogen.generator.read_mmproj_modalities",
+            return_value=MmprojModalities(has_vision=True, has_audio=True),
+        ):
+            capabilities = build_capabilities(
+                "default-params", MacroConfig(), model_file, None, None, mmproj_path=mmproj_file
+            )
+
+        assert capabilities.in_ == ["text", "image", "audio"]
+
+    def test_mmproj_without_modality_metadata_falls_back_to_image(self, tmp_path):
+        model_file = tmp_path / "model-Q4_K_M.gguf"
+        model_file.write_bytes(b"\x00")
+        mmproj_file = tmp_path / "mmproj-F16.gguf"
+        mmproj_file.write_bytes(b"\x00")
+
+        with patch(
+            "llama_swap_config_autogen.generator.read_mmproj_modalities",
+            return_value=MmprojModalities(has_vision=False, has_audio=False),
+        ):
+            capabilities = build_capabilities(
+                "default-params", MacroConfig(), model_file, None, None, mmproj_path=mmproj_file
+            )
+
+        assert capabilities.in_ == ["text", "image"]

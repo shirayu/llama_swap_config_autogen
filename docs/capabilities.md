@@ -8,7 +8,9 @@ real context length, modality, or tool-calling support otherwise (see
 gap). Every generated model entry gets an auto-derived `capabilities` block instead:
 
 - `context`: resolved from `-c`/`--ctx-size` in the expanded command, falling back to GGUF metadata.
-- `in`: `[text, image]` when an `mmproj` is attached to the entry, otherwise `[text]`.
+- `in`: `[text]`, plus `image` and/or `audio` when an `mmproj` is attached, based on that mmproj GGUF's
+  `clip.has_vision_encoder` / `clip.has_audio_encoder` metadata (e.g. Ultravox and Qwen2-Audio mmproj files are
+  detected as `audio`, not `image`).
 - `tools`: `true` when the GGUF's chat template references tool calling; omitted otherwise.
 
 The GGUF-derived parts of this (context fallback, `tools`, plus `metadata.reasoning_supported`) require GGUF headers
@@ -48,7 +50,8 @@ model_patterns:
       reranker: false
 ```
 
-Audio models should declare their modalities explicitly, since they can't be inferred from the GGUF or command:
+Standalone speech models that don't go through an `mmproj` (e.g. a bare whisper.cpp GGUF served on its own) should
+declare their modalities explicitly, since there's no attached mmproj metadata to derive them from:
 
 ```yaml
 model_patterns:

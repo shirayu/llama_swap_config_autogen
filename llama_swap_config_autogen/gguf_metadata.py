@@ -197,3 +197,43 @@ def get_gguf_metadata(path: Path, cache: GGUFMetadataCache) -> GGUFMetadata:
     metadata = _read_gguf_metadata(path)
     cache.set(path, metadata)
     return metadata
+
+
+class MmprojModalities(BaseModel):
+    has_vision: bool = False
+    has_audio: bool = False
+
+
+def read_mmproj_modalities(path: Path) -> MmprojModalities:
+    """Read which modalities an mmproj (clip) GGUF file supports.
+
+    llama.cpp's clip.cpp stores clip.has_vision_encoder / clip.has_audio_encoder
+    booleans in the mmproj GGUF header; these are independent of the "mmproj"
+    filename convention and let a single mmproj file be correctly attributed
+    to image vs. audio input support (e.g. Ultravox, Qwen2-Audio mmproj files).
+    """
+    try:
+        reader = GGUFReader(str(path), "r")
+    except Exception:
+        logger.debug("Failed to open mmproj GGUF %s", path, exc_info=True)
+        return MmprojModalities()
+
+    kv = {field.name: field for field in reader.fields.values()}
+
+    def get_bool(key: str) -> bool:
+        field = kv.get(key)
+        if field is None:
+            return False
+        try:
+            value = field.contents(0)
+            if isinstance(value, (list, tuple)):
+                value = value[0] if value else False
+            return bool(value)
+        except Exception:
+            logger.debug("Failed to coerce GGUF field %s to bool", key, exc_info=True)
+            return False
+
+    return MmprojModalities(
+        has_vision=get_bool("clip.has_vision_encoder"),
+        has_audio=get_bool("clip.has_audio_encoder"),
+    )
