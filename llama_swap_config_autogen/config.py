@@ -83,7 +83,7 @@ def load_macro_config(config_file: Path) -> MacroConfig:
             for k, v in pattern_config.items():
                 if k not in {"macro", "emit_base"}:
                     norm_k = normalize_macro_name(k)
-                    if norm_k == "mmproj":
+                    if norm_k in {"mmproj", "draft"}:
                         norm_v = v
                     elif isinstance(v, str):
                         norm_v = (

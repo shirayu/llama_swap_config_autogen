@@ -42,12 +42,18 @@ metadata:
 using each model's resolved `-ngl`, `-c`, `--cache-type-k`/`-v`, and CPU-offload flags (`-ot`, `--cpu-moe`,
 `--n-cpu-moe`) — all forwarded to `fit-params` as-is so it simulates the real tensor placement.
 
+When an `mmproj` and/or a draft (speculative decoding / MTP) model is attached (see
+[`tutorial.md`](./tutorial.md#4-explicit-multi-modal-projection-mmproj-binding) and
+[`tutorial.md`](./tutorial.md#5-draft-model-speculative-decoding--mtp-binding)), their on-disk file sizes are added
+on top of the `fit-params` result as a rough approximation — `fit-params` itself only simulates the main model, not
+the attached projector/draft weights.
+
 ## Path mapping for containerized runtimes
 
 If the runtime sees model files under a different path than the one scanned under `models:` (e.g. a container
 bind-mount), set `path_prefix_map` in `base.yaml`. It rewrites host paths to runtime paths using the longest
-matching prefix, and applies both to the `-m`/`--mmproj` arguments in generated commands and to the path passed to
-`fit-params`:
+matching prefix, and applies to the `-m`/`--mmproj`/`--model-draft` arguments in generated commands and to the path
+passed to `fit-params`:
 
 ```yaml
 path_prefix_map:

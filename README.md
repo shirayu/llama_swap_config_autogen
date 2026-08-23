@@ -86,7 +86,7 @@ That's it — every model under your directory is now served. Re-run step 3 when
 
 | Doc | What it covers |
 | --- | --- |
-| [`docs/tutorial.md`](./docs/tutorial.md) | Step-by-step guide: parameterized macros, variant presets, mmproj binding, a full worked example. |
+| [`docs/tutorial.md`](./docs/tutorial.md) | Step-by-step guide: parameterized macros, variant presets, mmproj binding, draft model (speculative decoding / MTP) binding, a full worked example. |
 | [`docs/spec.md`](./docs/spec.md) | Complete `base.yaml` field reference and generation rules. |
 | [`docs/vram-estimation.md`](./docs/vram-estimation.md) | Enabling VRAM estimation, `path_prefix_map`, caching, auto-derived metadata fields. |
 | [`docs/capabilities.md`](./docs/capabilities.md) | How the `capabilities` block (`context`, `in`, `tools`, ...) is derived and how to override it. |

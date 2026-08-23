@@ -43,6 +43,11 @@ mmproj:                              # optional
   generate_no_mmproj_variant: <bool> # default: false
   no_mmproj_suffix: <string>         # default: " (no mmproj)"
   overrides: { <model-id|display-name|filename>: <path>, ... }
+draft:                               # optional
+  enabled: <bool>                    # default: true
+  auto_attach: <bool>                # default: false
+  arg: <string>                      # default: --model-draft
+  overrides: { <model-id|display-name|filename>: <path>, ... }
 vram_estimation: <bool>              # optional, default: false
 read_gguf_metadata: <bool>           # optional, default: false
 path_prefix_map: { <host-prefix>: <runtime-prefix>, ... }  # optional, default: {}
@@ -88,6 +93,10 @@ startPort: <int>                     # optional, default: 9091
       `reranker` (`bool`), `context` (`int`). All fields are optional and override the corresponding
       auto-derived value (see Section 6) when set. Applies to the base entry and all variants generated
       from this pattern.
+    - `mmproj`: Optional absolute path, relative path from the config file directory, or filename of a
+      discovered mmproj file to attach explicitly (see Section 3.6). Overrides auto-attach/`mmproj.overrides`.
+    - `draft`: Optional absolute path, relative path from the config file directory, or filename of a
+      discovered draft file to attach explicitly (see Section 3.7). Overrides auto-attach/`draft.overrides`.
 - First matching entry is selected in file order.
     - Matching is substring-based, not "most specific pattern wins".
     - If both `qwen3.6-35b` and `qwen3.6-35b/a3b-mtp` are present, a model named
@@ -138,7 +147,36 @@ Behavior when `enabled: false`:
 
 - Legacy behavior is kept: `mmproj` files are treated like normal `.gguf` model files.
 
-### 3.7 `vram_estimation` (optional)
+### 3.7 `draft` (optional)
+
+- Type: `object`
+- Fields:
+    - `enabled` (`bool`, default `true`)
+    - `auto_attach` (`bool`, default `false`)
+    - `arg` (`string`, default `--model-draft`)
+    - `overrides` (`map[string, path]`, default `{}`). Values can be absolute paths, relative paths from the
+      config file directory, or simple filenames/partial paths matching any discovered draft files.
+
+Behavior when `enabled: true`:
+
+- Files whose names contain `mtp` or `draft` (case-insensitive) are excluded from standalone model generation.
+- `--model-draft <path>` is appended to model commands when:
+    - an override exists for model ID, display name, or model filename, or
+    - a `draft` value is set on the matched `model_patterns` entry, or
+    - `auto_attach: true` and there is exactly one draft candidate in the same directory as the model file.
+- Exactly one "with draft" model entry is generated per matched model/variant; there is no "without draft"
+  counterpart to `mmproj`'s `generate_no_mmproj_variant`. Add a separate `model_patterns`/`variants` entry with
+  `draft` left unset if a no-draft comparison model is needed.
+- When `auto_attach: true` and GGUF metadata reading is enabled (`vram_estimation: true` or
+  `read_gguf_metadata: true`), auto-attach is skipped (with a logged warning) if the main model's and the
+  candidate draft's GGUF vocab sizes are both known and disagree. Explicit `draft` overrides/`model_patterns`
+  bindings are never skipped by this check.
+
+Behavior when `enabled: false`:
+
+- Legacy behavior is kept: files matching `mtp`/`draft` are treated like normal `.gguf` model files.
+
+### 3.8 `vram_estimation` (optional)
 
 - Type: `bool`, default `false`.
 - When `true`, GGUF headers are read for every discovered model, and `generate --llama-bin <command>` is required
@@ -146,19 +184,19 @@ Behavior when `enabled: false`:
   `--llama-bin`, estimation is skipped with a warning even when this is `true`.
 - Implies `read_gguf_metadata: true`.
 
-### 3.8 `read_gguf_metadata` (optional)
+### 3.9 `read_gguf_metadata` (optional)
 
 - Type: `bool`, default `false`.
 - When `true`, GGUF headers are read to auto-derive `capabilities.tools`, `metadata.reasoning_supported`, and the
   `capabilities.context` fallback, without paying for VRAM estimation.
 - Implied by `vram_estimation: true`.
 
-### 3.9 `path_prefix_map` (optional)
+### 3.10 `path_prefix_map` (optional)
 
 - Type: `map[string, string]`, default `{}`.
 - Rewrites host-side model paths (as scanned under `models`) to the path the runtime sees, using the longest
-  matching key as a prefix. Applies to both the generated command's `-m`/`--mmproj` arguments and the model path
-  passed to `fit-params` during VRAM estimation.
+  matching key as a prefix. Applies to the generated command's `-m`/`--mmproj`/`--model-draft` arguments and the
+  model path passed to `fit-params` during VRAM estimation.
 - Use this when the generator runs somewhere other than where `llama-server`/`fit-params` actually reads the
   files from (e.g. a bind-mounted container path).
 
@@ -180,9 +218,11 @@ Behavior when `enabled: false`:
 Generated model command format:
 
 ```text
-${binary} -m <absolute_model_path> --port ${PORT} --host 0.0.0.0 <macro>
+${binary} -m <absolute_model_path> --port ${PORT} --host 0.0.0.0 [<mmproj_arg> <mmproj_path>] [<draft_arg> <draft_path>] <macro>
 ```
 
+The `<mmproj_arg> <mmproj_path>` segment is included only when an mmproj file is attached (Section 3.6).
+The `<draft_arg> <draft_path>` segment is included only when a draft file is attached (Section 3.7).
 If `<macro>` is a macro name, it is wrapped as `${<macro>}`.
 If `<macro>` is already an expression like `${a} ${b}`, it is used as-is.
 
@@ -230,6 +270,8 @@ quantization suffix for model ID generation.
   `meta.llamaswap.model_family` in `/v1/models`.
 - `metadata.estimated_vram_bytes` -> the VRAM estimate in bytes when `vram_estimation: true`; llama-swap exposes it
   under `meta.llamaswap.estimated_vram_bytes` in `/v1/models`. It is omitted when estimation is disabled or fails.
+  When an `mmproj` and/or a draft model is attached, their on-disk file sizes are added on top of the `fit-params`
+  result as a rough approximation.
 - `metadata.file_size_bytes` -> the GGUF file's actual size on disk, in bytes. Emitted whenever GGUF headers are
   read (`vram_estimation: true` or `read_gguf_metadata: true`).
 - `metadata.expert_count` / `metadata.expert_used_count` -> total and active expert counts from the GGUF headers,
@@ -241,6 +283,9 @@ quantization suffix for model ID generation.
   when an `mmproj` is attached and the field is set. Omitted otherwise.
 - `metadata` is finally merged with the contents of a user-authored `<model>.json` sidecar file next to the GGUF
   (same basename), when present. The sidecar's keys take precedence over any auto-derived fields.
+- Draft attachment (Section 3.7) affects the generated `cmd` (via `--model-draft <path>`) and, when
+  `vram_estimation: true`, adds the draft file's on-disk size to `metadata.estimated_vram_bytes`. It does not
+  contribute any `capabilities` fields.
 
 Standalone speech models that don't go through an `mmproj` (e.g. a bare whisper.cpp GGUF) should declare their
 modalities explicitly in `model_patterns`, for example `in: [audio]` for speech recognition or `out: [audio]` for

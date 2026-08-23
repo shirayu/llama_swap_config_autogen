@@ -14,7 +14,8 @@ example patterns it ships with. You will learn how to design a highly maintainab
 2. [Parameterized Macros: Eliminating Numeric Duplications](#2-parameterized-macros-eliminating-numeric-duplications)
 3. [Variant Presets with Implicit Argument Binding](#3-variant-presets-with-implicit-argument-binding)
 4. [Explicit Multi-Modal Projection (mmproj) Binding](#4-explicit-multi-modal-projection-mmproj-binding)
-5. [Put It All Together: A Complete base.yaml Example](#5-put-it-all-together-a-complete-baseyaml-example)
+5. [Draft Model (Speculative Decoding / MTP) Binding](#5-draft-model-speculative-decoding--mtp-binding)
+6. [Put It All Together: A Complete base.yaml Example](#6-put-it-all-together-a-complete-baseyaml-example)
 
 ---
 
@@ -146,7 +147,44 @@ Using this pattern matches the target model family prefix (`gemma-4-31b`) and re
 
 ---
 
-## 5. Put It All Together: A Complete base.yaml Example
+## 5. Draft Model (Speculative Decoding / MTP) Binding
+
+Files that look like a draft/speculative-decoding model — matching `mtp` or `draft` in the filename (e.g. `mtp-Qwen3.8-27B-Q4_0.gguf`) — are auto-discovered the same way `mmproj` files are: they're excluded from the standalone model list and instead resolved as an attachment for a main model, passed via `--model-draft`.
+
+Unlike `mmproj`, `auto_attach` defaults to **off** for drafts, since a mismatched draft/main model pair produces an unusable configuration (draft and main model must share the same tokenizer/vocab) rather than merely wasting VRAM. When `auto_attach` is enabled and GGUF metadata reading is on (`vram_estimation: true` or `read_gguf_metadata: true`), the generator compares the vocab sizes of the main model and the candidate draft file, and skips attachment (logging a warning) if they disagree.
+
+### Enabling Auto-Attach
+
+```yaml
+draft:
+  enabled: true
+  auto_attach: true
+  arg: --model-draft
+  overrides: {}
+```
+
+With `auto_attach: true`, a draft file found alone next to a main model (i.e. the only draft-matching file in that directory) is attached automatically.
+
+### Explicit Binding via `model_patterns`
+
+Just like `mmproj`, you can bind a draft file explicitly by filename, relative path, or absolute path inside `model_patterns`. This also works when `auto_attach` is off, or when multiple draft candidates exist in the same directory:
+
+```yaml
+macros:
+  qwen-mtp-params: ${default-params} --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.8 --parallel 1
+
+model_patterns:
+  qwen3.8-27b:
+    macro: qwen-mtp-params
+    draft: mtp-Qwen3.8-27B-Q4_0.gguf
+```
+
+> [!NOTE]
+> Only a single "with draft" variant is generated per model — there is no `generate_no_draft_variant` counterpart to `mmproj`'s `generate_no_mmproj_variant`, since speculative decoding doesn't change output and there's usually no reason to run without it once a compatible draft is available. If you do want a comparison model without the draft attached, add it explicitly via `variants`/`model_patterns` with `draft` left unset.
+
+---
+
+## 6. Put It All Together: A Complete base.yaml Example
 
 Here is a complete, real-world inspired `base.yaml` that uses all the advanced features discussed above:
 

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 CACHE_PATH = Path.home() / ".cache" / "llama_swap_config_autogen" / "gguf_metadata.json"
 ARCH_FALLBACKS = ["llama", "mistral", "phi3", "gemma", "qwen2"]
-CACHE_SCHEMA_VERSION = 8
+CACHE_SCHEMA_VERSION = 9
 TOOL_TEMPLATE_MARKERS = ("tool_calls", "tools")
 REASONING_TEMPLATE_MARKERS = ("enable_thinking", "reasoning_content")
 
@@ -27,6 +27,7 @@ class GGUFMetadata(BaseModel):
     supports_reasoning: bool = False
     repo_url: str = ""
     license: str = ""
+    vocab_size: int = 0
 
 
 class GGUFMetadataCache(BaseModel):
@@ -144,6 +145,14 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
     context_length = next((get_int(f"{a}.context_length") for a in archs if get_int(f"{a}.context_length")), 0)
     expert_count = next((get_int(f"{a}.expert_count") for a in archs if get_int(f"{a}.expert_count")), 0)
     expert_used_count = next((get_int(f"{a}.expert_used_count") for a in archs if get_int(f"{a}.expert_used_count")), 0)
+    vocab_size = next((get_int(f"{a}.vocab_size") for a in archs if get_int(f"{a}.vocab_size")), 0)
+    if vocab_size == 0:
+        tokens_field = kv.get("tokenizer.ggml.tokens")
+        if tokens_field is not None:
+            try:
+                vocab_size = len(tokens_field.data)
+            except Exception:
+                logger.debug("Failed to determine vocab size from tokenizer.ggml.tokens", exc_info=True)
 
     chat_template_keys = [key for key in kv if key.startswith("tokenizer.chat_template")]
     supports_tools = any(marker in get_str(key) for key in chat_template_keys for marker in TOOL_TEMPLATE_MARKERS)
@@ -164,6 +173,7 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         supports_reasoning=supports_reasoning,
         repo_url=repo_url,
         license=license_name,
+        vocab_size=vocab_size,
     )
 
     logger.debug(

@@ -29,6 +29,13 @@ class MmprojConfig(BaseModel):
     no_mmproj_suffix: str = Field(default=" (no mmproj)")
 
 
+class DraftConfig(BaseModel):
+    enabled: bool = Field(default=True)
+    auto_attach: bool = Field(default=False)
+    arg: str = Field(default="--model-draft")
+    overrides: dict[str, Path] = Field(default_factory=dict)
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -38,6 +45,7 @@ class Config(BaseModel):
     variants: list[dict[str, Any]] = Field(default_factory=list)
     variant_presets: dict[str, Any] = Field(default_factory=dict)
     mmproj: MmprojConfig = Field(default_factory=MmprojConfig)
+    draft: DraftConfig = Field(default_factory=DraftConfig)
     default_ttl: int = Field(default=300)
     vram_estimation: bool = Field(default=False)
     read_gguf_metadata: bool = Field(
@@ -65,6 +73,7 @@ class ModelPatternConfig(BaseModel):
     emit_base: bool = Field(default=True)
     variants: list[str] = Field(default_factory=list)
     mmproj: str | None = Field(default=None)
+    draft: str | None = Field(default=None)
     capabilities: CapabilitiesConfig | None = Field(default=None)
 
 

@@ -23,6 +23,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 MMPROJ_PATTERN = re.compile(r"mmproj", re.IGNORECASE)
+DRAFT_PATTERN = re.compile(r"\bmtp\b|draft", re.IGNORECASE)
 BF16_PATTERN = re.compile(r"bf16", re.IGNORECASE)
 F16_PATTERN = re.compile(r"(?<!b)f16", re.IGNORECASE)
 F32_PATTERN = re.compile(r"f32", re.IGNORECASE)
@@ -140,6 +141,10 @@ def is_mmproj_file(path_model: Path) -> bool:
     return bool(MMPROJ_PATTERN.search(path_model.name))
 
 
+def is_draft_file(path_model: Path) -> bool:
+    return bool(DRAFT_PATTERN.search(path_model.name))
+
+
 def resolve_mmproj_path(value_str: str, config_dir: Path, all_mmproj_files: list[Path]) -> Path:
     value = Path(value_str)
     if value.is_absolute():
@@ -202,6 +207,92 @@ def select_mmproj_path_for_model(
     return None
 
 
+def resolve_draft_path(value_str: str, config_dir: Path, all_draft_files: list[Path]) -> Path:
+    value = Path(value_str)
+    if value.is_absolute():
+        resolved = value
+    else:
+        resolved = (config_dir / value).resolve()
+
+    if resolved.exists():
+        return resolved
+
+    candidates = []
+    norm_val = value_str.replace("\\", "/").lower()
+    for draft_path in all_draft_files:
+        norm_path = draft_path.as_posix().lower()
+        if draft_path.name.lower() == norm_val or norm_path.endswith("/" + norm_val) or norm_path.endswith(norm_val):
+            candidates.append(draft_path)
+
+    if len(candidates) == 1:
+        return candidates[0]
+    elif len(candidates) > 1:
+        raise ValueError(
+            f"draft path is ambiguous: '{value_str}'. Matches multiple files: {[str(c) for c in candidates]}"
+        )
+    else:
+        raise ValueError(f"draft path or file name does not exist: {value_str}")
+
+
+def draft_vocab_compatible(
+    model_path: Path,
+    draft_path: Path,
+    metadata_cache: GGUFMetadataCache | None,
+) -> bool:
+    """Return False only when both vocab sizes are known and disagree.
+
+    Unknown (0) vocab sizes are treated as compatible since they can't be compared.
+    """
+    if metadata_cache is None:
+        return True
+    try:
+        model_vocab = get_gguf_metadata(model_path, metadata_cache).vocab_size
+        draft_vocab = get_gguf_metadata(draft_path, metadata_cache).vocab_size
+    except Exception as e:
+        logger.warning("Could not read GGUF metadata to verify draft vocab compatibility: %s", e)
+        return True
+    if model_vocab and draft_vocab and model_vocab != draft_vocab:
+        return False
+    return True
+
+
+def select_draft_path_for_model(
+    model_path: Path,
+    model_id: str,
+    display_name: str,
+    draft_overrides: dict[str, Path],
+    draft_by_prefix: dict[str, list[Path]],
+    auto_attach: bool,
+    metadata_cache: GGUFMetadataCache | None,
+    pattern_draft_path: Path | None = None,
+) -> Path | None:
+    if pattern_draft_path:
+        return pattern_draft_path
+
+    exact_override = (
+        draft_overrides.get(model_id) or draft_overrides.get(display_name) or draft_overrides.get(model_path.name)
+    )
+    if exact_override:
+        return exact_override
+
+    if not auto_attach:
+        return None
+
+    candidates = draft_by_prefix.get(str(model_path.parent), [])
+    if len(candidates) != 1:
+        return None
+
+    candidate = candidates[0]
+    if not draft_vocab_compatible(model_path, candidate, metadata_cache):
+        logger.warning(
+            "Skipping draft auto-attach for %s: vocab size mismatch with candidate %s",
+            display_name,
+            candidate.name,
+        )
+        return None
+    return candidate
+
+
 def format_suffix_for_id(suffix: str) -> str:
     return suffix.replace(" ", "-").replace("(", "").replace(")", "").replace("+", "plus").lower()
 
@@ -211,17 +302,20 @@ def format_command_with_macro(
     macro_name: str,
     mmproj_path: str | None = None,
     mmproj_arg: str = "--mmproj",
+    draft_path: str | None = None,
+    draft_arg: str = "--model-draft",
 ) -> MultilineLiteral:
     """Generate command using macro (llama-swap format)"""
     mmproj_part = f" {mmproj_arg} {mmproj_path}" if mmproj_path else ""
+    draft_part = f" {draft_arg} {draft_path}" if draft_path else ""
 
     # Check if macro_name already contains ${...} references (for complex macros)
     if macro_name.startswith("${") and macro_name.endswith("}"):
         # It's already a formatted macro expression, use as-is
-        cmd = f"${{binary}} -m {model_path} --port ${{PORT}} --host 0.0.0.0{mmproj_part} {macro_name}"
+        cmd = f"${{binary}} -m {model_path} --port ${{PORT}} --host 0.0.0.0{mmproj_part}{draft_part} {macro_name}"
     else:
         # It's a simple macro name, wrap it with ${}
-        cmd = f"${{binary}} -m {model_path} --port ${{PORT}} --host 0.0.0.0{mmproj_part} ${{{macro_name}}}"
+        cmd = f"${{binary}} -m {model_path} --port ${{PORT}} --host 0.0.0.0{mmproj_part}{draft_part} ${{{macro_name}}}"
     return MultilineLiteral(cmd)
 
 
@@ -289,6 +383,7 @@ def estimate_vram_gib(
     llama_bin: list[str] | None,
     path_prefix_map: dict[str, str],
     mmproj_path: Path | None = None,
+    draft_path: Path | None = None,
 ) -> float | None:
     """Return the GPU VRAM estimate in GiB via llama.cpp fit-params, or None if estimation fails/unavailable."""
     if not llama_bin:
@@ -301,6 +396,7 @@ def estimate_vram_gib(
         v_match = CACHE_TYPE_V_PATTERN.search(cmd)
         extra_args = extract_extra_fit_args(cmd)
         extra_gpu_gib = (mmproj_path.stat().st_size / 1024**3) if mmproj_path else 0.0
+        extra_gpu_gib += (draft_path.stat().st_size / 1024**3) if draft_path else 0.0
 
         vram_gib = estimate_vram_gib_via_fit_params(
             llama_bin=llama_bin,
@@ -316,7 +412,7 @@ def estimate_vram_gib(
         )
         if vram_gib is not None:
             logger.info(
-                "VRAM estimate for %s: %.1f GiB (ngl=%d, ctx=%d, mmproj=%.2f GiB)",
+                "VRAM estimate for %s: %.1f GiB (ngl=%d, ctx=%d, mmproj+draft=%.2f GiB)",
                 path_model.name,
                 vram_gib,
                 ngl,
@@ -338,6 +434,7 @@ def build_model_metadata(
     llama_bin: list[str] | None = None,
     path_prefix_map: dict[str, str] | None = None,
     mmproj_path: Path | None = None,
+    draft_path: Path | None = None,
     vram_estimation: bool = True,
 ) -> tuple[dict[str, Any], bool]:
     """Build model metadata and report whether the GGUF cache changed.
@@ -361,6 +458,7 @@ def build_model_metadata(
                 llama_bin,
                 path_prefix_map or {},
                 mmproj_path=mmproj_path,
+                draft_path=draft_path,
             )
             if vram_gib is not None:
                 model_metadata["estimated_vram_bytes"] = round(vram_gib * 1024**3)
@@ -547,6 +645,23 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
         except ValueError as exc:
             raise ValueError(f"mmproj override error for '{key}': {exc}") from exc
 
+    draft_config = config.draft
+
+    # Pre-scan all draft (speculative decoding) files across models directories
+    all_draft_files: list[Path] = []
+    if draft_config.enabled:
+        for models_dir in settings.models_dirs:
+            if models_dir.exists():
+                discovered_files = set(models_dir.rglob("*.gguf")) | set(models_dir.rglob("*.GGUF"))
+                all_draft_files.extend([path for path in discovered_files if is_draft_file(path)])
+
+    draft_overrides: dict[str, Path] = {}
+    for key, value in draft_config.overrides.items():
+        try:
+            draft_overrides[key] = resolve_draft_path(str(value), settings.config_file.parent, all_draft_files)
+        except ValueError as exc:
+            raise ValueError(f"draft override error for '{key}': {exc}") from exc
+
     metadata_cache = GGUFMetadataCache.load() if settings.read_gguf_metadata else None
     fit_params_cache = FitParamsCache.load() if settings.vram_estimation and settings.llama_bin else None
     cache_dirty = False
@@ -563,12 +678,23 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
             model_files = discovered
             mmproj_files = []
 
+        if draft_config.enabled:
+            model_files = [path for path in model_files if not is_draft_file(path)]
+            draft_files = [path for path in discovered if is_draft_file(path)]
+        else:
+            draft_files = []
+
         ignore_first_segment = should_ignore_first_segment(models_dir, model_files)
 
         mmproj_by_prefix: dict[str, list[Path]] = {}
         for mmproj_path in mmproj_files:
             prefix = str(mmproj_path.parent)
             mmproj_by_prefix.setdefault(prefix, []).append(mmproj_path)
+
+        draft_by_prefix: dict[str, list[Path]] = {}
+        for draft_path in draft_files:
+            prefix = str(draft_path.parent)
+            draft_by_prefix.setdefault(prefix, []).append(draft_path)
 
         for path_model in model_files:
             display_name = build_display_name(models_dir, path_model, ignore_first_segment)
@@ -593,7 +719,31 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                 except ValueError as exc:
                     raise ValueError(f"mmproj resolution error in model pattern for '{display_name}': {exc}") from exc
 
+            pattern_draft_path = None
+            pattern_draft_val = getattr(pattern_config, "draft", None)
+            if pattern_draft_val is not None:
+                try:
+                    pattern_draft_path = resolve_draft_path(
+                        pattern_draft_val, settings.config_file.parent, all_draft_files
+                    )
+                except ValueError as exc:
+                    raise ValueError(f"draft resolution error in model pattern for '{display_name}': {exc}") from exc
+
             runtime_model_path = apply_path_prefix_map(path_model, settings.path_prefix_map)
+
+            selected_draft_path = select_draft_path_for_model(
+                model_path=path_model,
+                model_id=model_id,
+                display_name=display_name,
+                draft_overrides=draft_overrides,
+                draft_by_prefix=draft_by_prefix,
+                auto_attach=draft_config.auto_attach,
+                metadata_cache=metadata_cache,
+                pattern_draft_path=pattern_draft_path,
+            )
+            runtime_draft_path = (
+                apply_path_prefix_map(selected_draft_path, settings.path_prefix_map) if selected_draft_path else None
+            )
 
             selected_mmproj_path = select_mmproj_path_for_model(
                 model_path=path_model,
@@ -613,6 +763,8 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     macro_name,
                     mmproj_path=runtime_mmproj_path,
                     mmproj_arg=mmproj_config.arg,
+                    draft_path=runtime_draft_path,
+                    draft_arg=draft_config.arg,
                 )
 
                 expanded_cmd = expand_macro_expression(macro_name, macro_config.macros)
@@ -622,6 +774,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     expanded_cmd,
                     metadata_cache,
                     mmproj_path=selected_mmproj_path,
+                    draft_path=selected_draft_path,
                     fit_params_cache=fit_params_cache,
                     llama_bin=settings.llama_bin,
                     path_prefix_map=settings.path_prefix_map,
@@ -702,6 +855,8 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 variant_macro,
                                 mmproj_path=runtime_mmproj_path,
                                 mmproj_arg=mmproj_config.arg,
+                                draft_path=runtime_draft_path,
+                                draft_arg=draft_config.arg,
                             )
                             variant_metadata, metadata_changed = build_model_metadata(
                                 display_name,
@@ -709,6 +864,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 expanded_variant_cmd,
                                 metadata_cache,
                                 mmproj_path=selected_mmproj_path,
+                                draft_path=selected_draft_path,
                                 fit_params_cache=fit_params_cache,
                                 llama_bin=settings.llama_bin,
                                 path_prefix_map=settings.path_prefix_map,
@@ -791,6 +947,8 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             variant_macro,
                             mmproj_path=runtime_mmproj_path,
                             mmproj_arg=mmproj_config.arg,
+                            draft_path=runtime_draft_path,
+                            draft_arg=draft_config.arg,
                         )
                         variant_metadata, metadata_changed = build_model_metadata(
                             display_name,
@@ -798,6 +956,7 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             expanded_variant_cmd,
                             metadata_cache,
                             mmproj_path=selected_mmproj_path,
+                            draft_path=selected_draft_path,
                             fit_params_cache=fit_params_cache,
                             llama_bin=settings.llama_bin,
                             path_prefix_map=settings.path_prefix_map,

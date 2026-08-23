@@ -41,6 +41,17 @@ mmproj:
   no_mmproj_suffix: ' (no mmproj)'
   overrides: {}
 
+# Draft (speculative decoding, e.g. MTP) files are auto-discovered by filename
+# (matching "mtp" or "draft") and excluded from the standalone model list, the
+# same way mmproj files are. When enabled+auto_attach, a draft file found alone
+# next to a main model is attached via `--model-draft`. Attachment is skipped
+# (with a warning) if the main model's and draft's GGUF vocab sizes disagree.
+draft:
+  enabled: true
+  auto_attach: false
+  arg: --model-draft
+  overrides: {}
+
 macros:
   # Runtime
   binary: /app/llama-server
@@ -79,6 +90,9 @@ macros:
   qwen-coder-params: ${default-params} ${temp-coding} ${ctx:32768}
   qwen-cpu-params: ${default-params} ${cpu-offload:12,16} ${ctx:65536}
   qwen-cpu-params-big: ${default-params} ${ngl:15} ${cpu-offload:12,16} ${ctx:65536}
+  # `draft`-tagged files (e.g. mtp-*.gguf) are never emitted as standalone models;
+  # attach one to a main model via the `draft:` model_patterns key (see qwen3.8-27b below)
+  # or `draft.overrides:`/`draft.auto_attach: true`, then reference this macro.
   qwen-mtp-params: ${default-params} --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.8 --parallel 1
 
   # Utility presets
@@ -135,10 +149,12 @@ model_patterns:
   # A pattern containing *, ?, or [ is treated as a glob (fnmatch) against the
   # full model id/filename/display name (e.g. "*qwen3*-vl-*" or "gemma-4-3?b").
   # Otherwise it falls back to a plain case-insensitive substring match.
-  # Keep the more specific qwen3.6-35b/a3b-mtp entry before qwen3.6-35b.
-  "qwen3*mtp":
-    macro: qwen-mtp-params
-    variants: [short-ctx]
+  # Example: attach a same-directory mtp-*.gguf draft file to the main model
+  # and use the speculative-decoding macro for it.
+  # qwen3.8-27b:
+  #   macro: qwen-mtp-params
+  #   draft: mtp-Qwen3.8-27B-Q4_0.gguf
+  #   variants: [short-ctx]
 
   qwen3:
     macro: default-params
