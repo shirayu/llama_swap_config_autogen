@@ -468,6 +468,8 @@ def build_model_metadata(
         try:
             metadata = get_gguf_metadata(path_model, metadata_cache)
             model_metadata["file_size_bytes"] = path_model.stat().st_size
+            if metadata.content_fingerprint:
+                model_metadata["content_fingerprint"] = metadata.content_fingerprint
             if metadata.expert_count > 0:
                 model_metadata["expert_count"] = metadata.expert_count
                 model_metadata["expert_used_count"] = metadata.expert_used_count

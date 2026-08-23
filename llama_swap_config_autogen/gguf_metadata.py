@@ -1,5 +1,6 @@
 """GGUF metadata reader with file-based cache."""
 
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -12,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 CACHE_PATH = Path.home() / ".cache" / "llama_swap_config_autogen" / "gguf_metadata.json"
 ARCH_FALLBACKS = ["llama", "mistral", "phi3", "gemma", "qwen2"]
-CACHE_SCHEMA_VERSION = 9
+CACHE_SCHEMA_VERSION = 10
 TOOL_TEMPLATE_MARKERS = ("tool_calls", "tools")
 REASONING_TEMPLATE_MARKERS = ("enable_thinking", "reasoning_content")
+FINGERPRINT_SAMPLE_BYTES = 4 * 1024 * 1024
 
 
 class GGUFMetadata(BaseModel):
@@ -28,6 +30,7 @@ class GGUFMetadata(BaseModel):
     repo_url: str = ""
     license: str = ""
     vocab_size: int = 0
+    content_fingerprint: str = ""
 
 
 class GGUFMetadataCache(BaseModel):
@@ -73,6 +76,23 @@ class GGUFMetadataCache(BaseModel):
 
     def set(self, path: Path, metadata: GGUFMetadata) -> None:
         self.entries[str(path)] = metadata
+
+
+def _compute_fingerprint(path: Path, size: int) -> str:
+    """Cheap content fingerprint for tracking a model file across moves/renames.
+
+    Hashes only the first and last FINGERPRINT_SAMPLE_BYTES instead of the whole
+    file, since GGUF files can be tens of GB and a full SHA-256 is not worth the
+    I/O cost for identity tracking (as opposed to integrity verification).
+    """
+    digest = hashlib.sha256()
+    digest.update(size.to_bytes(8, "little"))
+    with path.open("rb") as f:
+        digest.update(f.read(FINGERPRINT_SAMPLE_BYTES))
+        if size > FINGERPRINT_SAMPLE_BYTES:
+            f.seek(max(size - FINGERPRINT_SAMPLE_BYTES, 0))
+            digest.update(f.read(FINGERPRINT_SAMPLE_BYTES))
+    return digest.hexdigest()
 
 
 def _read_gguf_metadata(path: Path) -> GGUFMetadata:
@@ -162,6 +182,7 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
 
     repo_url = get_str("general.repo_url") or get_str("general.source.repo_url")
     license_name = get_str("general.license")
+    content_fingerprint = _compute_fingerprint(path, stat.st_size)
 
     metadata = GGUFMetadata(
         mtime=stat.st_mtime,
@@ -174,6 +195,7 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         repo_url=repo_url,
         license=license_name,
         vocab_size=vocab_size,
+        content_fingerprint=content_fingerprint,
     )
 
     logger.debug(

@@ -186,6 +186,55 @@ class TestReadGgufMetadata:
 
         assert meta.supports_reasoning is False
 
+    def test_content_fingerprint_stable_across_rename(self, tmp_path):
+        content = b"\x00" * 1024
+        model_a = tmp_path / "model-a.gguf"
+        model_a.write_bytes(content)
+        model_b = tmp_path / "model-b.gguf"
+        model_b.write_bytes(content)
+
+        fake_reader = SimpleNamespace(fields={})
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta_a = _read_gguf_metadata(model_a)
+            meta_b = _read_gguf_metadata(model_b)
+
+        assert meta_a.content_fingerprint != ""
+        assert meta_a.content_fingerprint == meta_b.content_fingerprint
+
+    def test_content_fingerprint_differs_on_content_change(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 1024)
+
+        fake_reader = SimpleNamespace(fields={})
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta_before = _read_gguf_metadata(model)
+
+        model.write_bytes(b"\x01" * 1024)
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta_after = _read_gguf_metadata(model)
+
+        assert meta_before.content_fingerprint != meta_after.content_fingerprint
+
+    def test_content_fingerprint_handles_file_larger_than_sample_window(self, tmp_path):
+        from llama_swap_config_autogen.gguf_metadata import FINGERPRINT_SAMPLE_BYTES
+
+        model = tmp_path / "model.gguf"
+        size = FINGERPRINT_SAMPLE_BYTES * 2 + 1024
+        with model.open("wb") as f:
+            f.seek(size - 1)
+            f.write(b"\x00")
+
+        fake_reader = SimpleNamespace(fields={})
+
+        with patch("llama_swap_config_autogen.gguf_metadata.GGUFReader", return_value=fake_reader):
+            meta = _read_gguf_metadata(model)
+
+        assert meta.content_fingerprint != ""
+        assert len(meta.content_fingerprint) == 64
+
     def test_discovers_non_fallback_arch_prefix(self, tmp_path):
         model = tmp_path / "model.gguf"
         model.write_bytes(b"\x00")

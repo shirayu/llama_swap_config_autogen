@@ -80,6 +80,8 @@ without paying for VRAM estimation) also derives these `metadata` fields:
   architecture supports reasoning/thinking mode. Describes model capability, not a per-request setting. Always
   emitted (not omitted on `false`).
 - `file_size_bytes`: the GGUF file's actual size on disk, in bytes.
+- `content_fingerprint`: a SHA-256 hash of the file size plus the first and last 4 MiB of the GGUF file. Useful for
+  tracking a model's identity across path/filename changes without hashing the entire (possibly multi-GB) file.
 - `expert_count` / `expert_used_count`: total and active experts, emitted only for mixture-of-experts models.
 - `repo_url`: source repository URL embedded in the GGUF (`general.repo_url` / `general.source.repo_url`), when set.
 - `license`: license name embedded in the GGUF (`general.license`), when set.
@@ -90,6 +92,7 @@ metadata:
   model_family: qwen3-30b
   estimated_vram_bytes: 20182171238
   file_size_bytes: 18933312716
+  content_fingerprint: 8f2c1a9e3b7d4f6a0c5e8b1d2f4a6c8e0b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a
   reasoning_supported: true
   expert_count: 128
   expert_used_count: 8

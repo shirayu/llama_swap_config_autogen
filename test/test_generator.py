@@ -20,11 +20,14 @@ from llama_swap_config_autogen.gguf_metadata import GGUFMetadata, GGUFMetadataCa
 from llama_swap_config_autogen.models import MacroConfig
 
 
-def _make_metadata(mtime: float = 0.0, size: int = 1024, context_length: int = 4096) -> GGUFMetadata:
+def _make_metadata(
+    mtime: float = 0.0, size: int = 1024, context_length: int = 4096, content_fingerprint: str = ""
+) -> GGUFMetadata:
     return GGUFMetadata(
         mtime=mtime,
         size=size,
         context_length=context_length,
+        content_fingerprint=content_fingerprint,
     )
 
 
@@ -217,6 +220,39 @@ class TestBuildModelMetadata:
         )
 
         assert "mmproj_projector_type" not in metadata
+
+    def test_includes_content_fingerprint_when_metadata_cache_provided(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 100)
+        metadata_cache = GGUFMetadataCache()
+
+        with patch(
+            "llama_swap_config_autogen.generator.get_gguf_metadata",
+            return_value=_make_metadata(content_fingerprint="deadbeef" * 8),
+        ):
+            metadata, _ = build_model_metadata(
+                "model",
+                model,
+                "-ngl 99 -c 4096",
+                metadata_cache,
+                vram_estimation=False,
+            )
+
+        assert metadata["content_fingerprint"] == "deadbeef" * 8
+
+    def test_omits_content_fingerprint_without_metadata_cache(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 100)
+
+        metadata, _ = build_model_metadata(
+            "model",
+            model,
+            "-ngl 99 -c 4096",
+            None,
+            vram_estimation=False,
+        )
+
+        assert "content_fingerprint" not in metadata
 
 
 # ---------------------------------------------------------------------------

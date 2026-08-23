@@ -274,6 +274,9 @@ quantization suffix for model ID generation.
   result as a rough approximation.
 - `metadata.file_size_bytes` -> the GGUF file's actual size on disk, in bytes. Emitted whenever GGUF headers are
   read (`vram_estimation: true` or `read_gguf_metadata: true`).
+- `metadata.content_fingerprint` -> a SHA-256 hash of the file size plus the first and last 4 MiB of the GGUF file,
+  for tracking a model's identity across path/filename changes without hashing the entire file. Emitted whenever
+  GGUF headers are read (`vram_estimation: true` or `read_gguf_metadata: true`).
 - `metadata.expert_count` / `metadata.expert_used_count` -> total and active expert counts from the GGUF headers,
   emitted only for mixture-of-experts models (omitted for dense models).
 - `metadata.repo_url` -> source repository URL from the GGUF's `general.repo_url` /
