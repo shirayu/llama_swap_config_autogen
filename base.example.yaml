@@ -84,12 +84,12 @@ macros:
   glm-47-params: ${default-params} --repeat-penalty 1.0 --temp 1.0
   gpt-oss-20b-params: ${reasoning-base} -c 0 -fa
   gpt-oss-120b-params: ${reasoning-base} ${ngl:13} --ctx-size 16384 --no-mmap
-  qwen-context-large-params: ${default-params} ${ctx:65536}
+  qwen-context-64k-params: ${default-params} ${ctx:65536}
+  qwen-context-128k-params: ${default-params} ${ctx:131072}
   qwen-long-context-params: ${default-params} ${ctx:163840}
   qwen-long-context-memory-efficient-params: ${default-params} ${memory-efficient} ${ctx:163840}
   qwen-coder-params: ${default-params} ${temp-coding} ${ctx:32768}
   qwen-cpu-params: ${default-params} ${cpu-offload:12,16} ${ctx:65536}
-  qwen-cpu-params-big: ${default-params} ${ngl:15} ${cpu-offload:12,16} ${ctx:65536}
   # `draft`-tagged files (e.g. mtp-*.gguf) are never emitted as standalone models;
   # attach one to a main model via the `draft:` model_patterns key (see qwen3.8-27b below)
   # or `draft.overrides:`/`draft.auto_attach: true`, then reference this macro.
@@ -97,7 +97,6 @@ macros:
 
   # Utility presets
   short-ctx-params: ${default-params} ${ctx:4096}
-  long-context-params: ${default-params} ${ctx:65536}
   memory-constrained-params: ${default-params} ${low-memory} ${memory-efficient}
 
 model_patterns:
@@ -116,6 +115,8 @@ model_patterns:
   # Reasoning-focused models
   r1-distill-qwen-32b:
     macro: deepseek-r1-params
+    # Locally overrides the global `fast-params` placeholder so that
+    # variant_presets.fast's ${fast-params} resolves to this model's macro.
     fast-params: ${deepseek-r1-params} ${inference-fast}
     variants: [fast, short-ctx]
 
@@ -158,7 +159,7 @@ model_patterns:
 
   qwen3:
     macro: default-params
-    variants: [short-ctx, long-context-q8, long-context-q4]
+    variants: [short-ctx, context-64k, context-128k, long-context-q8, long-context-q4, cpu]
 
   swallow-70b/instruct:
     macro: default-params
@@ -166,40 +167,48 @@ model_patterns:
 
   muse-glimmer-30b:
     macro: default-params
-    variants: [long-context]
+    variants: [context-64k]
 
   # Lightweight models (for memory-constrained environments)
   Phi-3: memory-constrained-params
   TinyLlama: memory-constrained-params
 
 variant_presets:
-  cpu:
-    - suffix: ' (with CPU)'
-      macro: ${cpu-params}
-
+  # Context-size ladder (short -> long, ~2-3x steps)
   short-ctx:
     - suffix: ' (short ctx)'
       macro: short-ctx-params
 
-  long-context:
-    - suffix: ' (long ctx)'
-      macro: long-context-params
+  context-64k:
+    - suffix: ' (64k ctx)'
+      macro: qwen-context-64k-params
 
-  memory-efficient:
-    - suffix: ' (Memory Efficient)'
-      macro: memory-constrained-params
-
-  fast:
-    - suffix: ' (Fast)'
-      macro: ${fast-params}
+  context-128k:
+    - suffix: ' (128k ctx)'
+      macro: qwen-context-128k-params
 
   long-context-q8:
-    - suffix: ' (long ctx)'
+    - suffix: ' (long ctx, q8 kv)'
       macro: qwen-long-context-params
 
   long-context-q4:
     - suffix: ' (long ctx, q4 kv)'
       macro: qwen-long-context-memory-efficient-params
+
+  # Resource-tradeoff variants
+  memory-efficient:
+    - suffix: ' (Memory Efficient)'
+      macro: memory-constrained-params
+
+  cpu:
+    - suffix: ' (with CPU)'
+      macro: qwen-cpu-params
+
+  # References a macro defined locally on the model_pattern that uses it
+  # (see r1-distill-qwen-32b's `fast-params` above).
+  fast:
+    - suffix: ' (Fast)'
+      macro: ${fast-params}
 
   gemma-4-variants:
     - suffix: ' (32k q8)'
