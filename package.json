@@ -3,9 +3,7 @@
   "description": "",
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
-    "@taplo/cli": "^0.7.0",
     "markdownlint-cli2": "^0.23.2",
-    "npm-run-all2": "^9.0.3",
     "pyright": "^1.1.413"
   },
   "engines": {
@@ -15,17 +13,7 @@
   "main": "",
   "name": "llama_swap_yaml_autogen",
   "scripts": {
-    "preinstall": "npx only-allow pnpm",
-    "format": "run-p format:biome format:markdownlint format:toml",
-    "format:biome": "biome check --write",
-    "format:markdownlint": "markdownlint-cli2 --fix",
-    "format:toml": "taplo format *.toml",
-    "test": ":",
-    "lint": "run-p lint:biome lint:md lint:pyright lint:toml",
-    "lint:biome": "biome check",
-    "lint:md": "markdownlint-cli2",
-    "lint:pyright": "pyright",
-    "lint:toml": "taplo format --check *.toml"
+    "preinstall": "npx only-allow pnpm"
   },
   "version": "1.0.0",
   "packageManager": "pnpm@10.5.2"

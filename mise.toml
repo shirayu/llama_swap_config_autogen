@@ -6,6 +6,7 @@ typos = "latest"
 uv = "latest"
 task = "latest"
 hadolint = "latest"
+taplo = "latest"
 
 [settings]
 lockfile = true
