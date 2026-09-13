@@ -17,6 +17,7 @@ logLevel: warn
 startPort: 9091
 vram_estimation: true
 captureBuffer: 0
+sendLoadingState: true
 
 # llama-swap official routing / groups (optional)
 # groups:
