@@ -4,10 +4,45 @@ import re
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 
 from .models import Config, MacroConfig, ModelPatternConfig, Settings, VariantPresetItem
 
 MACRO_REF_PATTERN = re.compile(r"\$\{([^}]+)\}")
+
+
+def _yaml_line_for_path(config_file: Path, path: tuple[str | int, ...]) -> int | None:
+    """Return the 1-based line number for a YAML mapping path, if available."""
+    try:
+        with config_file.open(encoding="utf-8") as file:
+            node = yaml.compose(file)
+    except (OSError, yaml.YAMLError):
+        return None
+
+    if node is None:
+        return None
+
+    current = node
+    line = None
+    for segment in path:
+        if not isinstance(current, yaml.MappingNode):
+            return line
+        next_node = None
+        for key_node, value_node in current.value:
+            if str(key_node.value) == str(segment):
+                line = key_node.start_mark.line + 1
+                next_node = value_node
+                break
+        if next_node is None:
+            return line
+        current = next_node
+    return line
+
+
+def _config_location(config_file: Path, path: tuple[str | int, ...] = ()) -> str:
+    """Format a config file location with a YAML line number when possible."""
+    line = _yaml_line_for_path(config_file, path) if path else None
+    return f"{config_file}:{line}" if line is not None else str(config_file)
 
 
 def normalize_macro_name(name: str) -> str:
@@ -43,7 +78,17 @@ def load_config(config_file: Path) -> Config:
     if not raw_data:
         raise ValueError(f"Empty config file: {config_file}")
 
-    return Config(**raw_data)
+    try:
+        return Config(**raw_data)
+    except ValidationError as exc:
+        details = []
+        for error in exc.errors():
+            location = tuple(error["loc"])
+            field = ".".join(str(part) for part in location) or "root"
+            details.append(
+                f"{_config_location(config_file, location)} ({field}): {error['msg']}"
+            )
+        raise ValueError("Invalid configuration:\n" + "\n".join(f"  - {detail}" for detail in details)) from exc
 
 
 def load_macro_config(config_file: Path) -> MacroConfig:
@@ -76,7 +121,10 @@ def load_macro_config(config_file: Path) -> MacroConfig:
         elif isinstance(pattern_config, dict):
             macro_name = pattern_config.get("macro")
             if not isinstance(macro_name, str):
-                raise ValueError(f"model_patterns entry '{pattern}' must define a string 'macro'")
+                location = _config_location(config_file, ("model_patterns", pattern))
+                raise ValueError(
+                    f"{location}: model_patterns entry '{pattern}' must define a string 'macro'"
+                )
             emit_base = pattern_config.get("emit_base", True)
 
             extra_kwargs = {}
@@ -95,7 +143,8 @@ def load_macro_config(config_file: Path) -> MacroConfig:
                         norm_v = v
                     extra_kwargs[norm_k] = norm_v
         else:
-            raise ValueError(f"model_patterns entry '{pattern}' must be a string or object")
+            location = _config_location(config_file, ("model_patterns", pattern))
+            raise ValueError(f"{location}: model_patterns entry '{pattern}' must be a string or object")
 
         normalized_macro_name = (
             normalize_macro_references(macro_name, name_map)

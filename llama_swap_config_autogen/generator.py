@@ -43,6 +43,29 @@ def extract_quantization_suffix(filename: str) -> str:
     return match.group(1).upper()
 
 
+def format_model_layout_details(models_dir: Path, model_files: list[Path]) -> str:
+    """Describe discovered layouts so directory-depth errors are actionable."""
+    examples_by_depth: dict[int, list[str]] = {}
+    for path in sorted(model_files):
+        relative_path = path.relative_to(models_dir)
+        depth = len(relative_path.parent.parts)
+        examples = examples_by_depth.setdefault(depth, [])
+        if len(examples) < 3:
+            examples.append(relative_path.as_posix())
+
+    layout_names = {
+        1: "model/*.gguf",
+        2: "model/variant/*.gguf",
+        3: "family/model/variant/*.gguf (family is ignored)",
+    }
+    lines = [f"Detected layouts under '{models_dir}':"]
+    for depth, examples in sorted(examples_by_depth.items()):
+        layout = layout_names.get(depth, f"{depth} directory levels")
+        lines.append(f"  - {layout}")
+        lines.extend(f"      {example}" for example in examples)
+    return "\n".join(lines)
+
+
 def should_ignore_first_segment(models_dir: Path, model_files: list[Path]) -> bool:
     if not model_files:
         return False
@@ -53,7 +76,8 @@ def should_ignore_first_segment(models_dir: Path, model_files: list[Path]) -> bo
         depth = len(parts)
         if depth not in {1, 2, 3}:
             raise ValueError(
-                f"Unexpected model directory depth for '{path}'. "
+                f"Unexpected model directory depth for '{path}' (found {depth} directory levels under "
+                f"'{models_dir}'). "
                 "Expected 'model/*.gguf' or 'model/variant/*.gguf', "
                 "with an optional ignored leading family directory."
             )
@@ -67,7 +91,8 @@ def should_ignore_first_segment(models_dir: Path, model_files: list[Path]) -> bo
         if 3 in depths and 1 in depths:
             raise ValueError(
                 f"Unexpected mixed model directory depths under '{models_dir}'. "
-                "Use one consistent layout style per models directory."
+                "Use one consistent layout style per models directory.\n"
+                + format_model_layout_details(models_dir, model_files)
             )
         if 3 in depths:
             has_family_layout = True
@@ -79,12 +104,14 @@ def should_ignore_first_segment(models_dir: Path, model_files: list[Path]) -> bo
     if has_family_layout and has_direct_layout:
         raise ValueError(
             f"Unexpected mixed model directory depths under '{models_dir}'. "
-            "Use one consistent layout style per models directory."
+            "Use one consistent layout style per models directory.\n"
+            + format_model_layout_details(models_dir, model_files)
         )
     if has_family_layout and has_ambiguous_layout:
         raise ValueError(
             f"Unexpected mixed model directory depths under '{models_dir}'. "
-            "Use one consistent layout style per models directory."
+            "Use one consistent layout style per models directory.\n"
+            + format_model_layout_details(models_dir, model_files)
         )
 
     return has_family_layout
@@ -96,7 +123,8 @@ def build_display_name(models_dir: Path, model_path: Path, ignore_first_segment:
     depth = len(parts)
     if depth not in {1, 2}:
         raise ValueError(
-            f"Unexpected model directory depth for '{model_path}'. "
+            f"Unexpected model directory depth for '{model_path}' (found {depth} directory levels under "
+            f"'{models_dir}'). "
             "Expected 'model/*.gguf' or 'model/variant/*.gguf', "
             "with an optional ignored leading family directory."
         )
@@ -1023,7 +1051,11 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
         fit_params_cache.save()
 
     if not models:
-        raise ValueError("No models found. Please check your models directory and ensure .gguf files exist.")
+        searched_dirs = ", ".join(str(directory) for directory in settings.models_dirs)
+        raise ValueError(
+            "No models found. Searched directories: "
+            f"{searched_dirs}. Please check that they exist and contain .gguf files."
+        )
 
     return models
 
@@ -1155,7 +1187,10 @@ def extract_used_macros_from_commands(commands: list[str], all_macros: dict[str,
 
 def generate_full_config(settings: Settings, config: Config) -> dict:
     """Generate complete configuration in llama-swap format"""
-    models = generate_model_configs(settings, config)
+    try:
+        models = generate_model_configs(settings, config)
+    except ValueError as exc:
+        raise ValueError(f"Generation failed for config '{settings.config_file}': {exc}") from exc
     macro_config = load_macro_config(settings.config_file)
 
     # Create llama-swap format configuration

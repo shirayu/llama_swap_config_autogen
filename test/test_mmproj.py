@@ -358,7 +358,10 @@ def test_generation_fails_when_model_is_stored_at_unexpected_depth(tmp_path: Pat
     try:
         generate_full_config(settings, config)
     except ValueError as exc:
-        assert "Unexpected model directory depth" in str(exc)
+        error = str(exc)
+        assert "Unexpected model directory depth" in error
+        assert str(model_file) in error
+        assert "found 0 directory levels" in error
     else:
         raise AssertionError("Expected generation to fail for unexpected directory depth")
 
@@ -400,7 +403,10 @@ def test_generation_fails_when_family_and_non_family_layouts_are_mixed(tmp_path:
     try:
         generate_full_config(settings, config)
     except ValueError as exc:
-        assert "Unexpected mixed model directory depths" in str(exc)
+        error = str(exc)
+        assert "Unexpected mixed model directory depths" in error
+        assert "Qwen/Qwen3.5-35B/standard/" in error
+        assert "Gemma-4-31B/it/" in error
     else:
         raise AssertionError("Expected generation to fail for mixed family and non-family layouts")
 

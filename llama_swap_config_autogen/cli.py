@@ -137,14 +137,18 @@ def main() -> None:
     if args.command == "generate":
         log_level = logging.DEBUG if args.verbose else logging.INFO
         logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s", stream=sys.stderr)
-        config = load_config(args.config)
-        llama_bin = shlex.split(args.llama_bin) if args.llama_bin else None
-        if config.vram_estimation and not llama_bin:
-            logging.getLogger(__name__).warning(
-                "vram_estimation is enabled but --llama-bin was not provided; skipping VRAM estimation."
-            )
-        settings = create_settings_from_config(config, args.config, llama_bin=llama_bin)
-        output_config = generate_full_config(settings, config)
+        try:
+            config = load_config(args.config)
+            llama_bin = shlex.split(args.llama_bin) if args.llama_bin else None
+            if config.vram_estimation and not llama_bin:
+                logging.getLogger(__name__).warning(
+                    "vram_estimation is enabled but --llama-bin was not provided; skipping VRAM estimation."
+                )
+            settings = create_settings_from_config(config, args.config, llama_bin=llama_bin)
+            output_config = generate_full_config(settings, config)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            raise SystemExit(1) from exc
 
         yaml_output = yaml.dump(
             output_config,
