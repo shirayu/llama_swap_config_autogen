@@ -85,9 +85,7 @@ def load_config(config_file: Path) -> Config:
         for error in exc.errors():
             location = tuple(error["loc"])
             field = ".".join(str(part) for part in location) or "root"
-            details.append(
-                f"{_config_location(config_file, location)} ({field}): {error['msg']}"
-            )
+            details.append(f"{_config_location(config_file, location)} ({field}): {error['msg']}")
         raise ValueError("Invalid configuration:\n" + "\n".join(f"  - {detail}" for detail in details)) from exc
 
 
@@ -122,9 +120,7 @@ def load_macro_config(config_file: Path) -> MacroConfig:
             macro_name = pattern_config.get("macro")
             if not isinstance(macro_name, str):
                 location = _config_location(config_file, ("model_patterns", pattern))
-                raise ValueError(
-                    f"{location}: model_patterns entry '{pattern}' must define a string 'macro'"
-                )
+                raise ValueError(f"{location}: model_patterns entry '{pattern}' must define a string 'macro'")
             emit_base = pattern_config.get("emit_base", True)
 
             extra_kwargs = {}

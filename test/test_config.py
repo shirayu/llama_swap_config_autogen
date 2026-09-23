@@ -8,11 +8,7 @@ from llama_swap_config_autogen.config import load_config, load_macro_config
 def test_invalid_model_pattern_reports_yaml_location(tmp_path):
     config_file = tmp_path / "base.yaml"
     config_file.write_text(
-        "models:\n"
-        "  - /models\n"
-        "model_patterns:\n"
-        "  broken:\n"
-        "    emit_base: true\n",
+        "models:\n  - /models\nmodel_patterns:\n  broken:\n    emit_base: true\n",
         encoding="utf-8",
     )
 
