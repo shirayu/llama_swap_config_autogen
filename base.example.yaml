@@ -96,6 +96,10 @@ macros:
   # or `draft.overrides:`/`draft.auto_attach: true`, then reference this macro.
   qwen-mtp-params: ${default-params} --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.8 --parallel 1
 
+  # llama.cpp decision models (served on /v1/systemone). The whole prompt is evaluated in one batch,
+  # so it must fit in --ubatch-size. `capabilities.out: [decisions]` is derived from the GGUF.
+  decision-params: ${ngl:999} ${ctx:8192} --batch-size 8192 --ubatch-size 8192
+
   # Utility presets
   short-ctx-params: ${default-params} ${ctx:4096}
   memory-constrained-params: ${default-params} ${low-memory} ${memory-efficient}
@@ -112,6 +116,10 @@ model_patterns:
     macro: default-params
     capabilities:
       out: [audio]
+
+  # Decision models (GGUF with `<arch>.decision.type`; `capabilities.out: [decisions]` is auto-derived)
+  Kev-4B: decision-params
+  Julia-1: decision-params
 
   # Reasoning-focused models
   r1-distill-qwen-32b:

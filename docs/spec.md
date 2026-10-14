@@ -265,7 +265,9 @@ quantization suffix for model ID generation.
       `clip.has_vision_encoder` / `clip.has_audio_encoder` metadata. Always emitted.
     - `tools` -> `true` when `vram_estimation: true` and the GGUF's `tokenizer.chat_template` metadata
       references tool calling (`tools`/`tool_calls`); otherwise omitted unless set explicitly.
-    - `out`, `reranker` -> emitted only when explicitly set in `model_patterns` (no auto-derivation).
+    - `out` -> `[decisions]` when the GGUF has a known `<arch>.decision.type` key (requires GGUF headers to be read;
+      `tools` is then not derived); otherwise emitted only when explicitly set in `model_patterns`.
+    - `reranker` -> emitted only when explicitly set in `model_patterns` (no auto-derivation).
 - `metadata.model_family` -> the first segment of the generated display name. llama-swap exposes it under
   `meta.llamaswap.model_family` in `/v1/models`.
 - `metadata.estimated_vram_bytes` -> the VRAM estimate in bytes when `vram_estimation: true`; llama-swap exposes it

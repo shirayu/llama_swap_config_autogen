@@ -12,6 +12,9 @@ gap). Every generated model entry gets an auto-derived `capabilities` block inst
   `clip.has_vision_encoder` / `clip.has_audio_encoder` metadata (e.g. Ultravox and Qwen2-Audio mmproj files are
   detected as `audio`, not `image`).
 - `tools`: `true` when the GGUF's chat template references tool calling; omitted otherwise.
+- `out`: `[decisions]` when the GGUF has a known `<arch>.decision.type` key, i.e. a llama.cpp decision model served on
+  `/v1/systemone` (the same check `llama-server` uses). `tools` is not derived for such models. Otherwise `out` is not
+  auto-derived.
 
 The GGUF-derived parts of this (context fallback, `tools`, plus `metadata.reasoning_supported`) require GGUF headers
 to be read, which happens automatically when `vram_estimation: true`. Set `read_gguf_metadata: true` instead if you
@@ -38,7 +41,7 @@ models:
 
 ## Overriding or extending
 
-Override any auto-derived field, and declare `out`/`reranker` (which aren't auto-derived), per `model_patterns`
+Override any auto-derived field, and declare `reranker` (which isn't auto-derived), per `model_patterns`
 entry:
 
 ```yaml
@@ -60,4 +63,15 @@ model_patterns:
     capabilities:
       in: [audio]
       out: [text]
+```
+
+Decision models are detected automatically (see above) when GGUF headers are read; to force it, declare `out: [decisions]`. Valid `out`
+values are `text`, `audio`, `image`, `video` and `decisions`; `in` accepts `text`, `audio`, `image` and `video`:
+
+```yaml
+model_patterns:
+  my-decision-model:
+    macro: default-params
+    capabilities:
+      out: [decisions]
 ```

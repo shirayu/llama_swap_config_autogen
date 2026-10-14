@@ -581,6 +581,24 @@ def resolve_tool_support(
     return metadata.supports_tools or None
 
 
+def resolve_decision_model(
+    path_model: Path,
+    metadata_cache: GGUFMetadataCache | None,
+) -> bool:
+    """Detect a llama.cpp decision model from the GGUF "<arch>.decision.type" key.
+
+    Requires vram_estimation or read_gguf_metadata to read GGUF metadata.
+    """
+    if metadata_cache is None:
+        return False
+
+    try:
+        return get_gguf_metadata(path_model, metadata_cache).is_decision_model
+    except Exception as e:
+        logger.warning("Could not read GGUF metadata for %s: %s", path_model.name, e)
+        return False
+
+
 def resolve_reasoning_support(
     path_model: Path,
     metadata_cache: GGUFMetadataCache | None,
@@ -613,10 +631,12 @@ def build_capabilities(
 
     Auto-derived: context (from -c/--ctx-size or GGUF metadata), tools (from GGUF chat_template),
     in (text, plus image/audio depending on the attached mmproj's clip.has_vision_encoder /
-    clip.has_audio_encoder metadata).
+    clip.has_audio_encoder metadata), out (`decisions` when the GGUF has a known `<arch>.decision.type`;
+    tools is not derived for such models).
     """
     context = resolve_context_length(macro_expr, macro_config, path_model, metadata_cache)
-    tools = resolve_tool_support(path_model, metadata_cache)
+    is_decision = resolve_decision_model(path_model, metadata_cache)
+    tools = None if is_decision else resolve_tool_support(path_model, metadata_cache)
     auto_in = ["text"]
     if mmproj_path is not None:
         modalities = read_mmproj_modalities(mmproj_path)
@@ -630,6 +650,8 @@ def build_capabilities(
     merged = user_capabilities.model_copy() if user_capabilities is not None else CapabilitiesConfig()
     if merged.context is None and context is not None:
         merged.context = context
+    if merged.out is None and is_decision:
+        merged.out = ["decisions"]
     if merged.tools is None and tools is not None:
         merged.tools = tools
     if merged.in_ is None:

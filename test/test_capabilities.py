@@ -320,3 +320,75 @@ def test_user_specified_tools_overrides_auto_derived_tools(tmp_path: Path, monke
 
     model_id = "qwen3-30b/standard:Q4_K_M"
     assert output["models"][model_id]["capabilities"]["tools"] is False
+
+
+def test_decision_model_output_modality_is_passed_through(tmp_path: Path):
+    models_dir = tmp_path / "models"
+    target_dir = models_dir / "Qwen3-30B" / "standard"
+    target_dir.mkdir(parents=True)
+    _touch(target_dir / "model-Q4_K_M.gguf")
+
+    config_path = tmp_path / "base.yaml"
+    _write_base_config(
+        config_path,
+        models_dir,
+        macros={"binary": "/app/llama-server", "default-params": "--jinja"},
+        extra={"model_patterns": {"qwen3-30b": {"macro": "default-params", "capabilities": {"out": ["decisions"]}}}},
+    )
+
+    config = load_config(config_path)
+    settings = create_settings_from_config(config, config_path)
+    output = generate_full_config(settings, config)
+
+    assert output["models"]["qwen3-30b/standard:Q4_K_M"]["capabilities"]["out"] == ["decisions"]
+
+
+def test_decision_model_gguf_gets_decisions_output_and_no_tools(tmp_path: Path, monkeypatch):
+    from llama_swap_config_autogen.gguf_metadata import GGUFMetadata
+
+    models_dir = tmp_path / "models"
+    target_dir = models_dir / "Qwen3-30B" / "standard"
+    target_dir.mkdir(parents=True)
+    _touch(target_dir / "model-Q4_K_M.gguf")
+
+    config_path = tmp_path / "base.yaml"
+    _write_base_config(
+        config_path,
+        models_dir,
+        macros={"binary": "/app/llama-server", "default-params": "--ctx-size 32768"},
+        extra={"read_gguf_metadata": True},
+    )
+
+    def fake_get_gguf_metadata(path, cache):
+        return GGUFMetadata(mtime=0, size=0, context_length=32768, supports_tools=True, is_decision_model=True)
+
+    monkeypatch.setattr("llama_swap_config_autogen.generator.get_gguf_metadata", fake_get_gguf_metadata)
+
+    config = load_config(config_path)
+    settings = create_settings_from_config(config, config_path)
+    output = generate_full_config(settings, config)
+
+    capabilities = output["models"]["qwen3-30b/standard:Q4_K_M"]["capabilities"]
+    assert capabilities["out"] == ["decisions"]
+    assert "tools" not in capabilities
+
+
+def test_decision_type_key_in_real_gguf_is_detected(tmp_path: Path):
+    from gguf import GGUFWriter
+
+    from llama_swap_config_autogen.gguf_metadata import _read_gguf_metadata
+
+    def write(name: str, decision_type: str | None) -> Path:
+        path = tmp_path / name
+        writer = GGUFWriter(str(path), "laya")
+        if decision_type is not None:
+            writer.add_string("laya.decision.type", decision_type)
+        writer.write_header_to_file()
+        writer.write_kv_data_to_file()
+        writer.write_tensors_to_file()
+        writer.close()
+        return path
+
+    assert _read_gguf_metadata(write("decision.gguf", "laya")).is_decision_model is True
+    assert _read_gguf_metadata(write("unknown.gguf", "not-supported")).is_decision_model is False
+    assert _read_gguf_metadata(write("plain.gguf", None)).is_decision_model is False

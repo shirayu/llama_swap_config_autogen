@@ -13,9 +13,25 @@ logger = logging.getLogger(__name__)
 
 CACHE_PATH = Path.home() / ".cache" / "llama_swap_config_autogen" / "gguf_metadata.json"
 ARCH_FALLBACKS = ["llama", "mistral", "phi3", "gemma", "qwen2"]
-CACHE_SCHEMA_VERSION = 10
+CACHE_SCHEMA_VERSION = 11
 TOOL_TEMPLATE_MARKERS = ("tool_calls", "tools")
 REASONING_TEMPLATE_MARKERS = ("enable_thinking", "reasoning_content")
+# Values of "<arch>.decision.type" that llama-server serves on /v1/systemone (see common/common.cpp in llama.cpp)
+DECISION_TYPES = frozenset(
+    {
+        "openjev",
+        "lev",
+        "kev",
+        "nimble",
+        "laya",
+        "clef",
+        "pplx-decider",
+        "vllm-decision2",
+        "vllm-d3",
+        "lfm2-d1",
+        "lfm2-d1-omni",
+    }
+)
 FINGERPRINT_SAMPLE_BYTES = 4 * 1024 * 1024
 
 
@@ -27,6 +43,7 @@ class GGUFMetadata(BaseModel):
     expert_used_count: int = 0
     supports_tools: bool = False
     supports_reasoning: bool = False
+    is_decision_model: bool = False
     repo_url: str = ""
     license: str = ""
     vocab_size: int = 0
@@ -180,6 +197,8 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         marker in get_str(key) for key in chat_template_keys for marker in REASONING_TEMPLATE_MARKERS
     )
 
+    is_decision_model = get_str(f"{get_str('general.architecture')}.decision.type") in DECISION_TYPES
+
     repo_url = get_str("general.repo_url") or get_str("general.source.repo_url")
     license_name = get_str("general.license")
     content_fingerprint = _compute_fingerprint(path, stat.st_size)
@@ -192,6 +211,7 @@ def _read_gguf_metadata(path: Path) -> GGUFMetadata:
         expert_used_count=expert_used_count,
         supports_tools=supports_tools,
         supports_reasoning=supports_reasoning,
+        is_decision_model=is_decision_model,
         repo_url=repo_url,
         license=license_name,
         vocab_size=vocab_size,
