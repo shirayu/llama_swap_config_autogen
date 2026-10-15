@@ -120,6 +120,7 @@ model_patterns:
   # Decision models (GGUF with `<arch>.decision.type`; `capabilities.out: [decisions]` is auto-derived)
   Kev-4B: decision-params
   Julia-1: decision-params
+  saihai: decision-params
 
   # Reasoning-focused models
   r1-distill-qwen-32b:
