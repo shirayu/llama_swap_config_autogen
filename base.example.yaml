@@ -4,7 +4,6 @@ models:
   #   <model>/*.gguf
   #   <model>/<variant>/*.gguf
   # Any .gguf outside those depths will raise an error.
-
 # Rewrites host-side model paths (as scanned under `models:`) to the path
 # seen by the runtime (e.g. inside a container) for both the generated
 # `cmd:` -m argument and any --llama-bin fit-params invocation.
@@ -39,7 +38,7 @@ mmproj:
   auto_attach: true
   arg: --mmproj
   generate_no_mmproj_variant: false
-  no_mmproj_suffix: ' (no mmproj)'
+  no_mmproj_suffix: " (no mmproj)"
   overrides: {}
 
 # Draft (speculative decoding, e.g. MTP) files are auto-discovered by filename
@@ -186,44 +185,44 @@ model_patterns:
 variant_presets:
   # Context-size ladder (short -> long, ~2-3x steps)
   short-ctx:
-    - suffix: ' (short ctx)'
+    - suffix: " (short ctx)"
       macro: short-ctx-params
 
   context-64k:
-    - suffix: ' (64k ctx)'
+    - suffix: " (64k ctx)"
       macro: qwen-context-64k-params
 
   context-128k:
-    - suffix: ' (128k ctx)'
+    - suffix: " (128k ctx)"
       macro: qwen-context-128k-params
 
   long-context-q8:
-    - suffix: ' (long ctx, q8 kv)'
+    - suffix: " (long ctx, q8 kv)"
       macro: qwen-long-context-params
 
   long-context-q4:
-    - suffix: ' (long ctx, q4 kv)'
+    - suffix: " (long ctx, q4 kv)"
       macro: qwen-long-context-memory-efficient-params
 
   # Resource-tradeoff variants
   memory-efficient:
-    - suffix: ' (Memory Efficient)'
+    - suffix: " (Memory Efficient)"
       macro: memory-constrained-params
 
   cpu:
-    - suffix: ' (with CPU)'
+    - suffix: " (with CPU)"
       macro: qwen-cpu-params
 
   # References a macro defined locally on the model_pattern that uses it
   # (see r1-distill-qwen-32b's `fast-params` above).
   fast:
-    - suffix: ' (Fast)'
+    - suffix: " (Fast)"
       macro: ${fast-params}
 
   gemma-4-variants:
-    - suffix: ' (32k q8)'
+    - suffix: " (32k q8)"
       macro: gemma-4-32k-q8-params
-    - suffix: ' (64k q4)'
+    - suffix: " (64k q4)"
       macro: gemma-4-64k-kv-q4-params
-    - suffix: ' (128k q4 limit)'
+    - suffix: " (128k q4 limit)"
       macro: gemma-4-128k-kv-q4-params

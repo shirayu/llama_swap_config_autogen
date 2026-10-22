@@ -9,21 +9,20 @@
 models:
   - /opt/llama.cpp/models
   # - /home/user/models  # Add additional directories if any
-
 # Multimodal projector configuration (optional)
 mmproj:
   enabled: true
   auto_attach: true
   arg: --mmproj
   generate_no_mmproj_variant: false
-  no_mmproj_suffix: ' (no mmproj)'
+  no_mmproj_suffix: " (no mmproj)"
   overrides: {}
 
 # Basic settings
-default_ttl: 300              # Model lifetime (seconds)
-healthCheckTimeout: 240       # Health check timeout (seconds)
-logLevel: warn                # Log level (debug, info, warn, error)
-startPort: 9091               # Starting port number
+default_ttl: 300 # Model lifetime (seconds)
+healthCheckTimeout: 240 # Health check timeout (seconds)
+logLevel: warn # Log level (debug, info, warn, error)
+startPort: 9091 # Starting port number
 
 # llama-swap official routing / groups (optional)
 # Controls model swapping behavior using official groups or matrix configs.

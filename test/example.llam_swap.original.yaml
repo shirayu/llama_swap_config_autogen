@@ -52,7 +52,6 @@ macros:
 # - the model's ID is available in the ${MODEL_ID} macro, also available in macros defined above
 # - below are examples of the all the settings a model can have
 models:
-
   # keys are the model names used in API requests
   "llama":
     # cmd: the command to run to start the inference server.
@@ -240,10 +239,10 @@ hooks:
   # - optional, default: empty dictionary
   # - the only supported action is preload
   on_startup:
-        # preload: a list of model ids to load on startup
-        # - optional, default: empty list
-        # - model names must match keys in the models sections
-        # - when preloading multiple models at once, define a group
-        #   otherwise models will be loaded and swapped out
+    # preload: a list of model ids to load on startup
+    # - optional, default: empty list
+    # - model names must match keys in the models sections
+    # - when preloading multiple models at once, define a group
+    #   otherwise models will be loaded and swapped out
     preload:
       - "llama"
