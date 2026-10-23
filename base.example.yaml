@@ -54,7 +54,7 @@ draft:
 
 macros:
   # Runtime
-  binary: /app/llama-server
+  binary: llama-server
 
   # Shared parts: base
   common-base: --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on
