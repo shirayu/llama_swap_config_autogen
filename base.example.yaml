@@ -129,6 +129,11 @@ model_patterns:
     fast-params: ${deepseek-r1-params} ${inference-fast}
     variants: [fast, short-ctx]
 
+  # Must precede the broad `qwen3` pattern: the file name contains "Qwen3".
+  r1-0528:
+    macro: deepseek-r1-params
+    variants: [short-ctx]
+
   gpt-oss-120b: gpt-oss-120b-params
   gpt-oss-20b: gpt-oss-20b-params
 
