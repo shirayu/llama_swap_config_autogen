@@ -80,6 +80,7 @@ macros:
   gemma-large-params: ${default-params} ${ngl:25} ${ctx:32768}
   gemma-4-32k-q8-params: ${common-base} ${ngl:999} ${ctx:32768}
   gemma-4-64k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:65536} --cache-type-k q4_0 --cache-type-v q4_0
+  gemma-4-96k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:98304} --cache-type-k q4_0 --cache-type-v q4_0
   gemma-4-128k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:131072} --cache-type-k q4_0 --cache-type-v q4_0
   glm-47-params: ${default-params} --repeat-penalty 1.0 --temp 1.0
   gpt-oss-20b-params: ${reasoning-base} -c 0 -fa
@@ -88,6 +89,8 @@ macros:
   qwen-context-128k-params: ${default-params} ${ctx:131072}
   qwen-long-context-params: ${default-params} ${ctx:163840}
   qwen-long-context-memory-efficient-params: ${default-params} ${memory-efficient} ${ctx:163840}
+  qwen-max-context-memory-efficient-params: ${default-params} ${memory-efficient} ${ctx:262144}
+  qwen-cpu-max-params: ${default-params} ${memory-efficient} ${cpu-offload:12,16} ${ctx:262144}
   qwen-coder-params: ${default-params} ${temp-coding} ${ctx:32768}
   qwen-cpu-params: ${default-params} ${cpu-offload:12,16} ${ctx:65536}
   # `draft`-tagged files (e.g. mtp-*.gguf) are never emitted as standalone models;
@@ -149,7 +152,7 @@ model_patterns:
   gemma-4-31b:
     macro: gemma-4-32k-q8-params
     emit_base: false
-    variants: [gemma-4-variants]
+    variants: [gemma-4-31b-variants]
     mmproj: unsloth_gemma-4-31B-it-GGUF_mmproj-BF16.gguf
 
   gemma-4-:
@@ -171,9 +174,15 @@ model_patterns:
   #   draft: mtp-Qwen3.8-27B-Q4_0.gguf
   #   variants: [short-ctx]
 
-  qwen3:
+  # Dense (27B): the native max context (262144) needs a q4 KV cache to fit in 24 GB.
+  qwen3.8-27b:
     macro: default-params
-    variants: [short-ctx, context-64k, context-128k, long-context-q8, long-context-q4, cpu]
+    variants: [long-context-q4, context-max-q4]
+
+  # MoE (35B-A3B): expert offload (--n-cpu-moe) makes the native max context fit.
+  qwen3.6-35b:
+    macro: default-params
+    variants: [cpu-max]
 
   swallow-70b/instruct:
     macro: default-params
@@ -209,6 +218,14 @@ variant_presets:
     - suffix: " (long ctx, q4 kv)"
       macro: qwen-long-context-memory-efficient-params
 
+  context-max-q4:
+    - suffix: " (max ctx, q4 kv)"
+      macro: qwen-max-context-memory-efficient-params
+
+  cpu-max:
+    - suffix: " (max ctx, with CPU)"
+      macro: qwen-cpu-max-params
+
   # Resource-tradeoff variants
   memory-efficient:
     - suffix: " (Memory Efficient)"
@@ -231,3 +248,12 @@ variant_presets:
       macro: gemma-4-64k-kv-q4-params
     - suffix: " (128k q4 limit)"
       macro: gemma-4-128k-kv-q4-params
+
+  # 31B only: 96k q4 is the longest step that loads on a 24 GB GPU (128k q4 does not).
+  gemma-4-31b-variants:
+    - suffix: " (32k q8)"
+      macro: gemma-4-32k-q8-params
+    - suffix: " (64k q4)"
+      macro: gemma-4-64k-kv-q4-params
+    - suffix: " (96k q4)"
+      macro: gemma-4-96k-kv-q4-params
