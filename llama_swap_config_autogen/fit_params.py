@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 CACHE_PATH = Path.home() / ".cache" / "llama_swap_config_autogen" / "fit_params_vram.json"
-CACHE_SCHEMA_VERSION = 1
+CACHE_SCHEMA_VERSION = 2
 
 
 class FitParamsCache(BaseModel):
@@ -64,6 +64,8 @@ def build_cache_key(
     ngl: int,
     ctx: int,
     extra_args: tuple[str, ...],
+    cache_type_k: str | None = None,
+    cache_type_v: str | None = None,
 ) -> str:
     stat = path_model.stat()
     payload = json.dumps(
@@ -74,6 +76,8 @@ def build_cache_key(
             "ngl": ngl,
             "ctx": ctx,
             "extra_args": extra_args,
+            "cache_type_k": cache_type_k,
+            "cache_type_v": cache_type_v,
         },
         sort_keys=True,
     )
@@ -118,7 +122,7 @@ def estimate_vram_gib_via_fit_params(
     extra_gpu_gib: float = 0.0,
 ) -> float | None:
     """Return the GPU VRAM estimate in GiB using llama.cpp's native fit-params tool, or None on failure."""
-    cache_key = build_cache_key(path_model, ngl, ctx, tuple(extra_args))
+    cache_key = build_cache_key(path_model, ngl, ctx, tuple(extra_args), cache_type_k, cache_type_v)
     cached = cache.get(cache_key)
     if cached is not None:
         return cached + extra_gpu_gib

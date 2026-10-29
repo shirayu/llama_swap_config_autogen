@@ -74,6 +74,20 @@ class TestBuildCacheKey:
         key2 = build_cache_key(model, ngl=99, ctx=4096, extra_args=("--cpu-moe",))
         assert key1 != key2
 
+    def test_different_cache_type_k_produces_different_key(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 100)
+        key1 = build_cache_key(model, ngl=99, ctx=4096, extra_args=(), cache_type_k="q8_0", cache_type_v="q8_0")
+        key2 = build_cache_key(model, ngl=99, ctx=4096, extra_args=(), cache_type_k="q4_0", cache_type_v="q8_0")
+        assert key1 != key2
+
+    def test_different_cache_type_v_produces_different_key(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 100)
+        key1 = build_cache_key(model, ngl=99, ctx=4096, extra_args=(), cache_type_k="q8_0", cache_type_v="q8_0")
+        key2 = build_cache_key(model, ngl=99, ctx=4096, extra_args=(), cache_type_k="q8_0", cache_type_v="q4_0")
+        assert key1 != key2
+
 
 class TestFitParamsCache:
     def test_get_returns_none_for_unknown_key(self):
