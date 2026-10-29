@@ -77,7 +77,6 @@ macros:
 
   # Presets
   deepseek-r1-params: ${reasoning-base} ${temp-reasoning}
-  gemma-large-params: ${default-params} ${ngl:25} ${ctx:32768}
   gemma-4-32k-q8-params: ${common-base} ${ngl:999} ${ctx:32768}
   gemma-4-64k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:65536} --cache-type-k q4_0 --cache-type-v q4_0
   gemma-4-96k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:98304} --cache-type-k q4_0 --cache-type-v q4_0
@@ -127,10 +126,7 @@ model_patterns:
   # Reasoning-focused models
   r1-distill-qwen-32b:
     macro: deepseek-r1-params
-    # Locally overrides the global `fast-params` placeholder so that
-    # variant_presets.fast's ${fast-params} resolves to this model's macro.
-    fast-params: ${deepseek-r1-params} ${inference-fast}
-    variants: [fast, short-ctx]
+    variants: [short-ctx]
 
   # Must precede the broad `qwen3` pattern: the file name contains "Qwen3".
   r1-0528:
@@ -141,14 +137,6 @@ model_patterns:
   gpt-oss-20b: gpt-oss-20b-params
 
   # General-purpose large models
-  gemma-3-27b:
-    macro: gemma-large-params
-    variants: [memory-efficient]
-
-  gemma-3-27b/it-qat:
-    macro: gemma-large-params
-    variants: [memory-efficient, short-ctx]
-
   gemma-4-31b:
     macro: gemma-4-32k-q8-params
     emit_base: false
@@ -234,12 +222,6 @@ variant_presets:
   cpu:
     - suffix: " (with CPU)"
       macro: qwen-cpu-params
-
-  # References a macro defined locally on the model_pattern that uses it
-  # (see r1-distill-qwen-32b's `fast-params` above).
-  fast:
-    - suffix: " (Fast)"
-      macro: ${fast-params}
 
   gemma-4-variants:
     - suffix: " (32k q8)"
