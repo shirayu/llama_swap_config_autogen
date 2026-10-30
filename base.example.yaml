@@ -80,6 +80,7 @@ macros:
   gemma-4-32k-q8-params: ${common-base} ${ngl:999} ${ctx:32768}
   gemma-4-64k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:65536} --cache-type-k q4_0 --cache-type-v q4_0
   gemma-4-96k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:98304} --cache-type-k q4_0 --cache-type-v q4_0
+  gemma-4-256k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:262144} --cache-type-k q4_0 --cache-type-v q4_0
   gemma-4-128k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:131072} --cache-type-k q4_0 --cache-type-v q4_0
   glm-47-params: ${default-params} --repeat-penalty 1.0 --temp 1.0
   gpt-oss-20b-params: ${reasoning-base} -c 0 -fa
@@ -90,6 +91,8 @@ macros:
   qwen-long-context-memory-efficient-params: ${default-params} ${memory-efficient} ${ctx:163840}
   qwen-max-context-memory-efficient-params: ${default-params} ${memory-efficient} ${ctx:262144}
   qwen-cpu-max-params: ${default-params} ${memory-efficient} ${cpu-offload:12,16} ${ctx:262144}
+  lfm3-256k-params: ${default-params} ${ctx:262144}
+  lfm25-24b-128k-params: ${default-params} ${ctx:131072}
   qwen-coder-params: ${default-params} ${temp-coding} ${ctx:32768}
   qwen-cpu-params: ${default-params} ${cpu-offload:12,16} ${ctx:65536}
   # `draft`-tagged files (e.g. mtp-*.gguf) are never emitted as standalone models;
@@ -143,6 +146,13 @@ model_patterns:
     variants: [gemma-4-31b-variants]
     mmproj: unsloth_gemma-4-31B-it-GGUF_mmproj-BF16.gguf
 
+  # 26B-A4B MoE (native ctx 262144). Must precede the broad `gemma-4-` pattern.
+  # VRAM of the 128k/256k steps is unmeasured: check estimated_vram_bytes after generating.
+  gemma-4-26b-a4b:
+    macro: gemma-4-32k-q8-params
+    emit_base: false
+    variants: [gemma-4-26b-a4b-variants]
+
   gemma-4-:
     macro: gemma-4-32k-q8-params
     emit_base: false
@@ -161,6 +171,21 @@ model_patterns:
   #   macro: qwen-mtp-params
   #   draft: mtp-Qwen3.8-27B-Q4_0.gguf
   #   variants: [short-ctx]
+
+  # LFM3-1.7B: native ctx 256K (~3.4 GiB estimated at 262144, q8 KV). VL-2B stays on the default.
+  lfm3/1.7b:
+    macro: default-params
+    variants: [lfm3-256k]
+
+  # LFM2.5-24B-A2B: native ctx 131072.
+  lfm2.5/24b-a2b:
+    macro: default-params
+    variants: [lfm25-24b-128k]
+
+  # RVN Heretic has no embedded MTP head, so it must not get the `mtp` variant of qwen3.8-27b.
+  heretic-rvn:
+    macro: default-params
+    variants: [long-context-q4, context-max-q4]
 
   # Dense (27B): the native max context (262144) needs a q4 KV cache to fit in 24 GB.
   qwen3.8-27b:
@@ -245,3 +270,20 @@ variant_presets:
       macro: gemma-4-64k-kv-q4-params
     - suffix: " (96k q4)"
       macro: gemma-4-96k-kv-q4-params
+
+  # 26B-A4B only: 128k/256k steps with q4 KV (VRAM unmeasured until the files exist).
+  gemma-4-26b-a4b-variants:
+    - suffix: " (32k q8)"
+      macro: gemma-4-32k-q8-params
+    - suffix: " (128k q4)"
+      macro: gemma-4-128k-kv-q4-params
+    - suffix: " (256k q4)"
+      macro: gemma-4-256k-kv-q4-params
+
+  lfm3-256k:
+    - suffix: " (256k)"
+      macro: lfm3-256k-params
+
+  lfm25-24b-128k:
+    - suffix: " (128k)"
+      macro: lfm25-24b-128k-params
