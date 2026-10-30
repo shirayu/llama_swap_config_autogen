@@ -385,11 +385,14 @@ def expand_macro_expression(expression: str, all_macros: dict[str, str]) -> str:
     return deduplicate_parameters(expanded)
 
 
-def extract_extra_fit_args(cmd: str) -> list[str]:
-    """Extract CPU-offload-related flags (-ot, --cpu-moe, --n-cpu-moe) to forward to fit-params.
+def extract_extra_fit_args(cmd: str, default_parallel: int | None = None) -> list[str]:
+    """Extract flags that change the memory footprint (-ot, --cpu-moe, --n-cpu-moe, --parallel) for fit-params.
 
     fit-params simulates the actual model load, so passing these through directly lets it compute
     the resulting GPU/CPU tensor split instead of us approximating it.
+
+    `--parallel`/`-np` changes the KV cache size (notably for sliding-window attention models). llama-server
+    picks 4 slots when it is not given, so `default_parallel` lets the caller mimic that default.
     """
     extra_args = []
     for match in re.finditer(r"-ot\s+(\S+)", cmd):
@@ -399,6 +402,11 @@ def extract_extra_fit_args(cmd: str) -> list[str]:
     n_cpu_moe_match = re.search(r"--n-cpu-moe\s+(\d+)", cmd)
     if n_cpu_moe_match:
         extra_args += ["--n-cpu-moe", n_cpu_moe_match.group(1)]
+    parallel_match = re.search(r"(?:--parallel|-np)\s+(\d+)", cmd)
+    if parallel_match:
+        extra_args += ["--parallel", parallel_match.group(1)]
+    elif default_parallel is not None:
+        extra_args += ["--parallel", str(default_parallel)]
     return extra_args
 
 
@@ -412,8 +420,16 @@ def estimate_vram_gib(
     path_prefix_map: dict[str, str],
     mmproj_path: Path | None = None,
     draft_path: Path | None = None,
+    overhead_mib: int = 0,
+    mmproj_extra_mib: int = 0,
+    default_parallel: int | None = None,
 ) -> float | None:
-    """Return the GPU VRAM estimate in GiB via llama.cpp fit-params, or None if estimation fails/unavailable."""
+    """Return the GPU VRAM estimate in GiB via llama.cpp fit-params, or None if estimation fails/unavailable.
+
+    On top of the fit-params result (model + KV cache + compute buffers) this adds the attached mmproj/draft file
+    sizes, `mmproj_extra_mib` per attached mmproj (its real memory is larger than the file), and a fixed
+    per-process `overhead_mib` (CUDA context etc.). All three default to 0, which keeps the raw fit-params value.
+    """
     if not llama_bin:
         return None
     try:
@@ -422,9 +438,10 @@ def estimate_vram_gib(
         ctx = extract_context_length(cmd, metadata_fallback_ctx or metadata.context_length or 4096)
         k_match = CACHE_TYPE_K_PATTERN.search(cmd)
         v_match = CACHE_TYPE_V_PATTERN.search(cmd)
-        extra_args = extract_extra_fit_args(cmd)
-        extra_gpu_gib = (mmproj_path.stat().st_size / 1024**3) if mmproj_path else 0.0
+        extra_args = extract_extra_fit_args(cmd, default_parallel)
+        extra_gpu_gib = (mmproj_path.stat().st_size / 1024**3 + mmproj_extra_mib / 1024) if mmproj_path else 0.0
         extra_gpu_gib += (draft_path.stat().st_size / 1024**3) if draft_path else 0.0
+        extra_gpu_gib += overhead_mib / 1024
 
         vram_gib = estimate_vram_gib_via_fit_params(
             llama_bin=llama_bin,
@@ -464,6 +481,9 @@ def build_model_metadata(
     mmproj_path: Path | None = None,
     draft_path: Path | None = None,
     vram_estimation: bool = True,
+    vram_overhead_mib: int = 0,
+    mmproj_vram_extra_mib: int = 0,
+    vram_default_parallel: int | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Build model metadata and report whether the GGUF cache changed.
 
@@ -487,6 +507,9 @@ def build_model_metadata(
                 path_prefix_map or {},
                 mmproj_path=mmproj_path,
                 draft_path=draft_path,
+                overhead_mib=vram_overhead_mib,
+                mmproj_extra_mib=mmproj_vram_extra_mib,
+                default_parallel=vram_default_parallel,
             )
             if vram_gib is not None:
                 model_metadata["estimated_vram_bytes"] = round(vram_gib * 1024**3)
@@ -831,6 +854,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                     llama_bin=settings.llama_bin,
                     path_prefix_map=settings.path_prefix_map,
                     vram_estimation=settings.vram_estimation,
+                    vram_overhead_mib=settings.vram_overhead_mib,
+                    mmproj_vram_extra_mib=settings.mmproj_vram_extra_mib,
+                    vram_default_parallel=settings.vram_default_parallel,
                 )
                 if metadata_changed:
                     cache_dirty = True
@@ -864,6 +890,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                         llama_bin=settings.llama_bin,
                         path_prefix_map=settings.path_prefix_map,
                         vram_estimation=settings.vram_estimation,
+                        vram_overhead_mib=settings.vram_overhead_mib,
+                        mmproj_vram_extra_mib=settings.mmproj_vram_extra_mib,
+                        vram_default_parallel=settings.vram_default_parallel,
                     )
                     if metadata_changed:
                         cache_dirty = True
@@ -921,6 +950,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 llama_bin=settings.llama_bin,
                                 path_prefix_map=settings.path_prefix_map,
                                 vram_estimation=settings.vram_estimation,
+                                vram_overhead_mib=settings.vram_overhead_mib,
+                                mmproj_vram_extra_mib=settings.mmproj_vram_extra_mib,
+                                vram_default_parallel=settings.vram_default_parallel,
                             )
                             if metadata_changed:
                                 cache_dirty = True
@@ -956,6 +988,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                     llama_bin=settings.llama_bin,
                                     path_prefix_map=settings.path_prefix_map,
                                     vram_estimation=settings.vram_estimation,
+                                    vram_overhead_mib=settings.vram_overhead_mib,
+                                    mmproj_vram_extra_mib=settings.mmproj_vram_extra_mib,
+                                    vram_default_parallel=settings.vram_default_parallel,
                                 )
                                 if metadata_changed:
                                     cache_dirty = True
@@ -1013,6 +1048,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                             llama_bin=settings.llama_bin,
                             path_prefix_map=settings.path_prefix_map,
                             vram_estimation=settings.vram_estimation,
+                            vram_overhead_mib=settings.vram_overhead_mib,
+                            mmproj_vram_extra_mib=settings.mmproj_vram_extra_mib,
+                            vram_default_parallel=settings.vram_default_parallel,
                         )
                         if metadata_changed:
                             cache_dirty = True
@@ -1046,6 +1084,9 @@ def generate_model_configs(settings: Settings, config: Config) -> dict[str, Yaml
                                 llama_bin=settings.llama_bin,
                                 path_prefix_map=settings.path_prefix_map,
                                 vram_estimation=settings.vram_estimation,
+                                vram_overhead_mib=settings.vram_overhead_mib,
+                                mmproj_vram_extra_mib=settings.mmproj_vram_extra_mib,
+                                vram_default_parallel=settings.vram_default_parallel,
                             )
                             if metadata_changed:
                                 cache_dirty = True

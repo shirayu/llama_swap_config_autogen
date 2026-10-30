@@ -49,6 +49,9 @@ draft:                               # optional
   arg: <string>                      # default: --model-draft
   overrides: { <model-id|display-name|filename>: <path>, ... }
 vram_estimation: <bool>              # optional, default: false
+vram_overhead_mib: <int>              # optional, default: 0
+mmproj_vram_extra_mib: <int>         # optional, default: 0
+vram_default_parallel: <int>         # optional, default: unset
 read_gguf_metadata: <bool>           # optional, default: false
 path_prefix_map: { <host-prefix>: <runtime-prefix>, ... }  # optional, default: {}
 default_ttl: <int>                   # optional, default: 300
@@ -183,6 +186,18 @@ Behavior when `enabled: false`:
   to actually run VRAM estimation (see [`vram-estimation.md`](./vram-estimation.md)). Without
   `--llama-bin`, estimation is skipped with a warning even when this is `true`.
 - Implies `read_gguf_metadata: true`.
+
+### 3.8.1 VRAM estimate tuning (optional)
+
+`fit-params` counts the model weights, KV cache and compute buffers only. A real `llama-server` process also holds a CUDA
+context, and an attached `mmproj` needs more than its file size. These optional settings correct the estimate; with all
+three unset the estimate is the raw `fit-params` value plus the attached mmproj/draft file sizes.
+
+- `vram_overhead_mib` (`int`, default `0`): fixed MiB added to every estimate (CUDA context etc.).
+- `mmproj_vram_extra_mib` (`int`, default `0`): MiB added per attached `mmproj`, on top of its file size.
+- `vram_default_parallel` (`int`, default unset): `--parallel` value forwarded to `fit-params` when the generated command
+  has none. `llama-server` uses 4 slots when `--parallel` is not given, which enlarges the KV cache of sliding-window
+  attention models; set `4` to mimic that. A `--parallel`/`-np` in the command always wins.
 
 ### 3.9 `read_gguf_metadata` (optional)
 

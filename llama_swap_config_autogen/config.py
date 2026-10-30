@@ -200,4 +200,7 @@ def create_settings_from_config(config: Config, config_file: Path, llama_bin: li
         read_gguf_metadata=config.vram_estimation or config.read_gguf_metadata,
         path_prefix_map=config.path_prefix_map,
         llama_bin=llama_bin,
+        vram_overhead_mib=config.vram_overhead_mib,
+        mmproj_vram_extra_mib=config.mmproj_vram_extra_mib,
+        vram_default_parallel=config.vram_default_parallel,
     )

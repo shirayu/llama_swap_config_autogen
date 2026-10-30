@@ -48,6 +48,23 @@ When an `mmproj` and/or a draft (speculative decoding / MTP) model is attached (
 on top of the `fit-params` result as a rough approximation — `fit-params` itself only simulates the main model, not
 the attached projector/draft weights.
 
+## Calibrating the estimate
+
+`fit-params` simulates the weights, the KV cache and the compute buffers. It does not count the CUDA context of the
+`llama-server` process, and an attached `mmproj` uses more memory than its file size (llama-server logs this at start-up as
+`[mtmd] estimated worst-case memory usage of mmproj`). Models with sliding-window attention also need a larger KV cache
+when `llama-server` runs several slots (`--parallel`, 4 when unset). Three optional settings correct for these:
+
+```yaml
+vram_overhead_mib: 500        # CUDA context etc., added to every estimate
+mmproj_vram_extra_mib: 150    # added per attached mmproj, on top of its file size
+vram_default_parallel: 4      # --parallel forwarded to fit-params when the command has none
+```
+
+To calibrate on your own hardware, load a few models with the exact command that is generated and compare the GPU memory
+reported by `nvidia-smi` with `estimated_vram_bytes`. All three settings default to "off", which keeps the raw
+`fit-params` value.
+
 ## Path mapping for containerized runtimes
 
 If the runtime sees model files under a different path than the one scanned under `models:` (e.g. a container

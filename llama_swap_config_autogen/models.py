@@ -48,6 +48,24 @@ class Config(BaseModel):
     draft: DraftConfig = Field(default_factory=DraftConfig)
     default_ttl: int = Field(default=300)
     vram_estimation: bool = Field(default=False)
+    vram_overhead_mib: int = Field(
+        default=0,
+        ge=0,
+        description="Fixed per-model VRAM (MiB) added to every fit-params estimate: CUDA context etc., which "
+        "fit-params does not count.",
+    )
+    mmproj_vram_extra_mib: int = Field(
+        default=0,
+        ge=0,
+        description="VRAM (MiB) added per attached mmproj on top of its file size: its real memory use is larger "
+        "than the file.",
+    )
+    vram_default_parallel: int | None = Field(
+        default=None,
+        ge=1,
+        description="--parallel value forwarded to fit-params when the generated cmd has none (llama-server picks "
+        "4 slots when it is not given), so the KV cache of sliding-window models is sized like the real server.",
+    )
     read_gguf_metadata: bool = Field(
         default=False,
         description="Read GGUF chat_template/architecture headers to auto-derive capabilities "
@@ -92,6 +110,9 @@ class Settings(BaseModel):
     read_gguf_metadata: bool = Field(default=False)
     path_prefix_map: dict[str, str] = Field(default_factory=dict)
     llama_bin: list[str] | None = Field(default=None)
+    vram_overhead_mib: int = Field(default=0)
+    mmproj_vram_extra_mib: int = Field(default=0)
+    vram_default_parallel: int | None = Field(default=None)
 
 
 class MultilineLiteral(str):

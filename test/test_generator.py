@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import yaml
 
 from llama_swap_config_autogen.config import create_settings_from_config, load_config
@@ -77,6 +78,16 @@ class TestExtractExtraFitArgs:
     def test_ot_flag(self):
         assert extract_extra_fit_args("-ngl 99 -ot '.*.ffn_.*_exps.=CPU'") == ["-ot", "'.*.ffn_.*_exps.=CPU'"]
 
+    def test_parallel_from_cmd(self):
+        assert extract_extra_fit_args("-ngl 99 --parallel 1") == ["--parallel", "1"]
+        assert extract_extra_fit_args("-ngl 99 -np 2") == ["--parallel", "2"]
+
+    def test_default_parallel_used_when_cmd_has_none(self):
+        assert extract_extra_fit_args("-ngl 99", default_parallel=4) == ["--parallel", "4"]
+
+    def test_cmd_parallel_overrides_default(self):
+        assert extract_extra_fit_args("-ngl 99 --parallel 1", default_parallel=4) == ["--parallel", "1"]
+
 
 # ---------------------------------------------------------------------------
 # estimate_vram_gib / build_model_metadata
@@ -119,6 +130,74 @@ class TestEstimateVramGib:
         assert kwargs["ngl"] == 99
         assert kwargs["ctx"] == 4096
         assert kwargs["cache_type_k"] == "q8_0"
+
+    def test_adds_mmproj_extra_and_overhead(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 100)
+        mmproj = tmp_path / "mmproj.gguf"
+        mmproj.write_bytes(b"\x00" * 1024**2)  # 1 MiB
+        metadata_cache = GGUFMetadataCache()
+        fit_cache = FitParamsCache()
+
+        with (
+            patch(
+                "llama_swap_config_autogen.generator.get_gguf_metadata",
+                return_value=_make_metadata(),
+            ),
+            patch(
+                "llama_swap_config_autogen.generator.estimate_vram_gib_via_fit_params",
+                return_value=1.0,
+            ) as mock_fit,
+        ):
+            estimate_vram_gib(
+                model,
+                "-ngl 99 -c 4096",
+                0,
+                metadata_cache,
+                fit_cache,
+                ["/app/llama"],
+                {},
+                mmproj_path=mmproj,
+                overhead_mib=512,
+                mmproj_extra_mib=256,
+                default_parallel=4,
+            )
+
+        _, kwargs = mock_fit.call_args
+        # mmproj file (1 MiB) + 256 MiB extra + 512 MiB overhead
+        assert kwargs["extra_gpu_gib"] == pytest.approx((1 + 256 + 512) / 1024)
+        assert kwargs["extra_args"] == ["--parallel", "4"]
+
+    def test_overhead_without_mmproj_has_no_mmproj_extra(self, tmp_path):
+        model = tmp_path / "model.gguf"
+        model.write_bytes(b"\x00" * 100)
+        metadata_cache = GGUFMetadataCache()
+        fit_cache = FitParamsCache()
+
+        with (
+            patch(
+                "llama_swap_config_autogen.generator.get_gguf_metadata",
+                return_value=_make_metadata(),
+            ),
+            patch(
+                "llama_swap_config_autogen.generator.estimate_vram_gib_via_fit_params",
+                return_value=1.0,
+            ) as mock_fit,
+        ):
+            estimate_vram_gib(
+                model,
+                "-ngl 99 -c 4096",
+                0,
+                metadata_cache,
+                fit_cache,
+                ["/app/llama"],
+                {},
+                overhead_mib=512,
+                mmproj_extra_mib=256,
+            )
+
+        _, kwargs = mock_fit.call_args
+        assert kwargs["extra_gpu_gib"] == pytest.approx(512 / 1024)
 
     def test_returns_none_on_exception(self, tmp_path):
         model = tmp_path / "model.gguf"
