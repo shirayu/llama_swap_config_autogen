@@ -80,7 +80,7 @@ macros:
   gemma-4-32k-q8-params: ${common-base} ${ngl:999} ${ctx:32768}
   gemma-4-64k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:65536} --cache-type-k q4_0 --cache-type-v q4_0
   gemma-4-96k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:98304} --cache-type-k q4_0 --cache-type-v q4_0
-  gemma-4-256k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:262144} --cache-type-k q4_0 --cache-type-v q4_0
+  gemma-4-256k-q8-params: ${common-base} ${ngl:999} ${ctx:262144}
   gemma-4-128k-kv-q4-params: ${common-base} ${ngl:999} ${ctx:131072} --cache-type-k q4_0 --cache-type-v q4_0
   glm-47-params: ${default-params} --repeat-penalty 1.0 --temp 1.0
   gpt-oss-20b-params: ${reasoning-base} -c 0 -fa
@@ -147,7 +147,6 @@ model_patterns:
     mmproj: unsloth_gemma-4-31B-it-GGUF_mmproj-BF16.gguf
 
   # 26B-A4B MoE (native ctx 262144). Must precede the broad `gemma-4-` pattern.
-  # VRAM of the 128k/256k steps is unmeasured: check estimated_vram_bytes after generating.
   gemma-4-26b-a4b:
     macro: gemma-4-32k-q8-params
     emit_base: false
@@ -271,14 +270,13 @@ variant_presets:
     - suffix: " (96k q4)"
       macro: gemma-4-96k-kv-q4-params
 
-  # 26B-A4B only: 128k/256k steps with q4 KV (VRAM unmeasured until the files exist).
+  # 26B-A4B only: the KV cache is small, so the native max context (262144) fits with q8 KV
+  # (fit-params estimate for the QAT build: 17.4 GiB, ~18.5 GiB with the mmproj; limit 21.9).
   gemma-4-26b-a4b-variants:
     - suffix: " (32k q8)"
       macro: gemma-4-32k-q8-params
-    - suffix: " (128k q4)"
-      macro: gemma-4-128k-kv-q4-params
-    - suffix: " (256k q4)"
-      macro: gemma-4-256k-kv-q4-params
+    - suffix: " (256k q8)"
+      macro: gemma-4-256k-q8-params
 
   lfm3-256k:
     - suffix: " (256k)"
