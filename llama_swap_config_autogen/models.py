@@ -6,6 +6,11 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+# Calibrated against nvidia-smi on an RTX 4090 with llama.cpp 0.8.0 (see docs/vram-estimation.md).
+DEFAULT_VRAM_OVERHEAD_MIB = 500
+DEFAULT_MMPROJ_VRAM_EXTRA_MIB = 150
+DEFAULT_VRAM_PARALLEL = 4
+
 
 class CapabilitiesConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -49,22 +54,23 @@ class Config(BaseModel):
     default_ttl: int = Field(default=300)
     vram_estimation: bool = Field(default=False)
     vram_overhead_mib: int = Field(
-        default=0,
+        default=DEFAULT_VRAM_OVERHEAD_MIB,
         ge=0,
         description="Fixed per-model VRAM (MiB) added to every fit-params estimate: CUDA context etc., which "
-        "fit-params does not count.",
+        "fit-params does not count. 0 keeps the raw fit-params value.",
     )
     mmproj_vram_extra_mib: int = Field(
-        default=0,
+        default=DEFAULT_MMPROJ_VRAM_EXTRA_MIB,
         ge=0,
         description="VRAM (MiB) added per attached mmproj on top of its file size: its real memory use is larger "
-        "than the file.",
+        "than the file. 0 adds only the file size.",
     )
     vram_default_parallel: int | None = Field(
-        default=None,
+        default=DEFAULT_VRAM_PARALLEL,
         ge=1,
         description="--parallel value forwarded to fit-params when the generated cmd has none (llama-server picks "
-        "4 slots when it is not given), so the KV cache of sliding-window models is sized like the real server.",
+        "4 slots when it is not given), so the KV cache of sliding-window models is sized like the real server. "
+        "null forwards nothing.",
     )
     read_gguf_metadata: bool = Field(
         default=False,
@@ -110,9 +116,9 @@ class Settings(BaseModel):
     read_gguf_metadata: bool = Field(default=False)
     path_prefix_map: dict[str, str] = Field(default_factory=dict)
     llama_bin: list[str] | None = Field(default=None)
-    vram_overhead_mib: int = Field(default=0)
-    mmproj_vram_extra_mib: int = Field(default=0)
-    vram_default_parallel: int | None = Field(default=None)
+    vram_overhead_mib: int = Field(default=DEFAULT_VRAM_OVERHEAD_MIB)
+    mmproj_vram_extra_mib: int = Field(default=DEFAULT_MMPROJ_VRAM_EXTRA_MIB)
+    vram_default_parallel: int | None = Field(default=DEFAULT_VRAM_PARALLEL)
 
 
 class MultilineLiteral(str):

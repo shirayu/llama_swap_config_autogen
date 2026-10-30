@@ -15,11 +15,9 @@ healthCheckTimeout: 240
 logLevel: warn
 startPort: 9091
 vram_estimation: true
-# fit-params counts weights + KV cache + compute buffers only. These correct it toward the real memory use
-# (calibrated on an RTX 4090 with llama.cpp 0.8.0; see docs/vram-estimation.md):
-vram_overhead_mib: 500
-mmproj_vram_extra_mib: 150
-vram_default_parallel: 4
+# The estimate is corrected toward the real memory use by default (vram_overhead_mib: 500,
+# mmproj_vram_extra_mib: 150, vram_default_parallel: 4; see docs/vram-estimation.md). Set them to 0 / 0 / null
+# to get the raw fit-params value.
 captureBuffer: 0
 sendLoadingState: true
 
