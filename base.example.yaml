@@ -98,6 +98,8 @@ macros:
   lfm25-24b-128k-params: ${default-params} ${ctx:131072}
   qwen-coder-params: ${default-params} ${temp-coding} ${ctx:32768}
   qwen-cpu-params: ${default-params} ${cpu-offload:12,16} ${ctx:65536}
+  # PLaMo 3 Translate GGUF: use its embedded Jinja template without assistant prefill.
+  plamo-translate-params: ${common-base} ${ngl:999} ${ctx:16384} --no-prefill-assistant --temp 0
   # `draft`-tagged files (e.g. mtp-*.gguf) are never emitted as standalone models;
   # attach one to a main model via the `draft:` model_patterns key (see qwen3.8-27b below)
   # or `draft.overrides:`/`draft.auto_attach: true`, then reference this macro.
@@ -112,6 +114,10 @@ macros:
   memory-constrained-params: ${default-params} ${low-memory} ${memory-efficient}
 
 model_patterns:
+  # Translation-specialized PLaMo 3 GGUF models (0.8B / 2B / 8B / 31B)
+  plamo-3-translate:
+    macro: plamo-translate-params
+
   # Audio capabilities are declared structurally instead of in model names.
   whisper:
     macro: default-params

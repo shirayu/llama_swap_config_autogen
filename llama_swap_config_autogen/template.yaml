@@ -69,6 +69,7 @@ macros:
   "qwen-coder-params": "${default-params} ${temp-coding} ${ctx:32768}"
   "qwen-cpu-params": "${default-params} ${cpu-offload:12,16} ${ctx:65536}"
   "qwen-context-large-params": "${default-params} ${ctx:65536}"
+  "plamo-translate-params": "--log-disable --jinja --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on ${ngl:999} ${ctx:16384} --no-prefill-assistant --temp 0"
 
   # Presets
   "memory-constrained-params": "${default-params} ${low-memory} ${memory-efficient}"
@@ -80,6 +81,9 @@ macros:
 #   qwen3-30b/instruct-2507
 #   gemma-4-31b/it
 model_patterns:
+  # PLaMo 3 Translate GGUF: translation-specialized models from 0.8B to 31B
+  "plamo-3-translate": "plamo-translate-params"
+
   # Reasoning-focused models
   "r1-distill":
     macro: "deepseek-r1-params"
