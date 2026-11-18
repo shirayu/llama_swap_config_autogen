@@ -2,8 +2,8 @@
   "author": "",
   "description": "",
   "devDependencies": {
-    "@biomejs/biome": "2.6.5",
-    "markdownlint-cli2": "^0.24.0",
+    "@biomejs/biome": "2.6.8",
+    "markdownlint-cli2": "^0.24.1",
     "pyright": "^1.1.414"
   },
   "engines": {
